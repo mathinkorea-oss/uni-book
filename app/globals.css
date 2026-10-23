@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f6f8;
+  --foreground: #202124;
+  --muted: #5f6368;
+  --placeholder: #5f6368;
+  --surface: #ffffff;
+  --input-bg: #fafbfc;
+  --border-card: #dde1e6;
+  --border-input: #cbd2dc;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --focus-ring: rgba(37, 99, 235, 0.25);
+  --shadow-card: 0 1px 3px rgba(32, 33, 36, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-placeholder: var(--placeholder);
+  --color-surface: var(--surface);
+  --color-input-bg: var(--input-bg);
+  --color-border-card: var(--border-card);
+  --color-border-input: var(--border-input);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    "Malgun Gothic",
+    var(--font-geist-sans),
+    system-ui,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}

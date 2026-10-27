@@ -180,7 +180,7 @@ export default function Home() {
       >
         <header className="mb-5">
           <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground lg:text-[28px]">
-            유니더 AI 법카 사용내역
+            유니더 스마트 사용내역
           </h1>
         </header>
 

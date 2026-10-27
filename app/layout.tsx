@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "유니더 AI 법카 사용내역",
+  title: "유니더 스마트 사용내역",
   description: "법인 카드 지출 가계부",
 };
 

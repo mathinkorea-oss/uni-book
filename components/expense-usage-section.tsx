@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeleteExpenseDialog } from "@/components/delete-expense-dialog";
 import { ExpenseEditSheet } from "@/components/expense-edit-sheet";
+import { ExpenseSummaryCard } from "@/components/expense-summary-card";
 import {
   CATEGORY_GROUPS,
   type CategoryCode,
@@ -35,9 +36,7 @@ import {
 import { expenseTextParts } from "@/lib/expense-parse";
 import {
   formatDateWithWeekday,
-  formatWon,
   sumByWeekdayInMonth,
-  WEEKDAY_DISPLAY_ORDER,
 } from "@/lib/expense-date";
 import {
   addMonths,
@@ -585,38 +584,15 @@ export function ExpenseUsageSection({
       )}
 
       {!loadingList && !listError && (
-        <div className="mb-3 rounded-[12px] bg-brand-yellow px-3 py-2.5 text-brand-ink lg:flex lg:items-stretch lg:gap-4">
-          <div className="min-w-0 lg:flex-1">
-            <p className="text-xs font-medium sm:text-sm">총 사용금액</p>
-            <p className="mt-0.5 font-mono text-xl font-bold tabular-nums sm:text-2xl">
-              {formatWon(monthTotal)}
-            </p>
-            <p className="mt-0.5 text-xs sm:text-sm">{entries.length}건 기록</p>
-            {categoryFilter !== "all" && (
-              <p className="mt-1 text-xs text-brand-ink/80 sm:text-sm">
-                선택 항목 기준 {formatWon(filteredTotal)} · {filtered.length}건
-              </p>
-            )}
-          </div>
-          <div className="mt-2 border-t border-brand-ink/10 pt-2 lg:mt-0 lg:flex-1 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-            <p className="text-xs font-medium sm:text-sm">
-              요일별 사용금액
-              {categoryFilter !== "all" ? " · 선택 항목 기준" : ""}
-            </p>
-            <div className="mt-1.5 grid grid-cols-4 gap-x-1.5 gap-y-2 lg:grid-cols-7 lg:gap-2">
-              {WEEKDAY_DISPLAY_ORDER.map(({ jsDay, label }) => (
-                <div key={label} className="min-w-0">
-                  <p className="text-[11px] font-medium text-brand-ink/70 sm:text-xs">
-                    {label}
-                  </p>
-                  <p className="mt-0.5 break-words font-mono text-[11px] font-semibold tabular-nums leading-tight sm:text-xs">
-                    {formatWon(weekdaySums[jsDay] ?? 0)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ExpenseSummaryCard
+          viewMonth={viewMonth}
+          monthTotal={monthTotal}
+          entryCount={entries.length}
+          categoryFilter={categoryFilter}
+          filteredTotal={filteredTotal}
+          filteredCount={filtered.length}
+          weekdaySums={weekdaySums}
+        />
       )}
 
       {savedOtherMonth && !isSameMonth(savedOtherMonth, viewMonth) && (

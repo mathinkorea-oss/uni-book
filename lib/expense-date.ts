@@ -57,3 +57,7 @@ export function sumByWeekdayInMonth(
 export function formatWon(amount: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(amount)}원`;
 }
+
+export function formatAmountNumber(amount: number): string {
+  return new Intl.NumberFormat("ko-KR").format(amount);
+}

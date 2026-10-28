@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeleteExpenseDialog } from "@/components/delete-expense-dialog";
 import { ExpenseEditSheet } from "@/components/expense-edit-sheet";
 import {
@@ -34,6 +34,12 @@ import {
 } from "@/lib/expense-sort";
 import { expenseTextParts } from "@/lib/expense-parse";
 import {
+  formatDateWithWeekday,
+  formatWon,
+  sumByWeekdayInMonth,
+  WEEKDAY_DISPLAY_ORDER,
+} from "@/lib/expense-date";
+import {
   addMonths,
   formatMonthLabel,
   getCurrentViewMonth,
@@ -46,6 +52,7 @@ import {
 import { EXPENSE_SELECT, type ExpenseRow, supabase } from "@/lib/supabase/client";
 
 const MOBILE_COLLAPSED = 3;
+const EXPENSE_LIST_ID = "expense-usage-list";
 
 export type UsageSectionHandle = {
   reload: () => Promise<void>;
@@ -153,7 +160,7 @@ function SortableRow({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={`w-full min-w-0 rounded-[12px] border border-brand-border bg-brand-surface px-3 py-3 ${
+      className={`w-full min-w-0 rounded-[12px] border border-brand-border bg-brand-surface px-3 py-2.5 ${
         isDragging ? "bg-brand-user-bubble ring-2 ring-brand-green" : ""
       }`}
     >
@@ -161,7 +168,7 @@ function SortableRow({
         {manualMode && !filterActive && (
           <button
             type="button"
-            className="mt-1 flex h-10 w-8 shrink-0 cursor-grab touch-manipulation items-center justify-center rounded-md text-brand-muted active:cursor-grabbing"
+            className="mt-0.5 flex h-10 w-8 shrink-0 cursor-grab touch-manipulation items-center justify-center rounded-md text-brand-muted active:cursor-grabbing"
             aria-label="순서 변경 핸들"
             {...attributes}
             {...listeners}
@@ -170,40 +177,46 @@ function SortableRow({
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-base font-medium leading-snug text-brand-ink">{main}</p>
-          <div className="mt-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 text-[0.9375rem] font-medium leading-snug text-brand-ink sm:text-base">
+              {main}
+            </p>
+            <p className="max-w-[45%] shrink-0 text-right font-mono text-[0.9375rem] font-bold tabular-nums leading-tight text-brand-ink sm:text-base">
+              {new Intl.NumberFormat("ko-KR").format(entry.amount)}원
+            </p>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <CategoryBadge
               code={entry.category_code}
               needsReview={entry.category_needs_review}
             />
+            <p className="text-xs text-brand-muted sm:text-sm">
+              {formatDateWithWeekday(entry.date)}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-brand-muted">{entry.date}</p>
-          {note && <p className="mt-0.5 text-sm text-brand-muted">{note}</p>}
+          {note ? (
+            <p className="mt-0.5 text-xs text-brand-muted sm:text-sm">{note}</p>
+          ) : null}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <p className="whitespace-nowrap font-mono text-base font-bold tabular-nums text-brand-ink">
-            {new Intl.NumberFormat("ko-KR").format(entry.amount)}원
-          </p>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="flex h-11 w-11 items-center justify-center rounded-[10px] text-brand-green hover:bg-brand-user-bubble"
-              aria-label="사용내역 수정"
-            >
-              <PencilIcon />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className={`flex h-11 w-11 items-center justify-center rounded-[10px] hover:bg-brand-user-bubble ${
-                deleteConfirmOpen ? "text-[#b3261e]" : "text-brand-muted"
-              }`}
-              aria-label="사용내역 삭제"
-            >
-              <TrashIcon />
-            </button>
-          </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex h-11 w-11 items-center justify-center rounded-[10px] text-brand-green hover:bg-brand-user-bubble"
+            aria-label="사용내역 수정"
+          >
+            <PencilIcon />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className={`flex h-11 w-11 items-center justify-center rounded-[10px] hover:bg-brand-user-bubble ${
+              deleteConfirmOpen ? "text-[#b3261e]" : "text-brand-muted"
+            }`}
+            aria-label="사용내역 삭제"
+          >
+            <TrashIcon />
+          </button>
         </div>
       </div>
       {manualMode && !filterActive && (
@@ -252,6 +265,7 @@ export function ExpenseUsageSection({
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const listTopRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -320,10 +334,40 @@ export function ExpenseUsageSection({
   const monthTotal = entries.reduce((s, e) => s + e.amount, 0);
   const filteredTotal = filtered.reduce((s, e) => s + e.amount, 0);
 
+  const weekdaySource = categoryFilter === "all" ? entries : filtered;
+  const weekdaySums = useMemo(
+    () => sumByWeekdayInMonth(weekdaySource),
+    [weekdaySource],
+  );
+
+  const showFullList =
+    sortMode === "manual" ||
+    listExpanded ||
+    filtered.length <= MOBILE_COLLAPSED;
+
   const displayList = useMemo(() => {
-    if (listExpanded || filtered.length <= MOBILE_COLLAPSED) return filtered;
+    if (showFullList) return filtered;
     return filtered.slice(0, MOBILE_COLLAPSED);
-  }, [filtered, listExpanded]);
+  }, [filtered, showFullList]);
+
+  const showExpandToggle =
+    sortMode !== "manual" && filtered.length > MOBILE_COLLAPSED;
+
+  function toggleListExpanded() {
+    if (sortMode === "manual") return;
+    setListExpanded((prev) => {
+      const next = !prev;
+      if (prev) {
+        requestAnimationFrame(() => {
+          listTopRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+      }
+      return next;
+    });
+  }
 
   function goToMonth(vm: ViewMonth) {
     setViewMonth(vm);
@@ -357,11 +401,13 @@ export function ExpenseUsageSection({
   async function handleSortModeChange(mode: SortMode) {
     if (mode === "manual") {
       setSortMode(mode);
+      setListExpanded(true);
       if (entries.length && entries.some((e) => e.sort_order == null)) {
         await ensureManualSortInitialized();
       }
     } else {
       setSortMode(mode);
+      setListExpanded(false);
     }
   }
 
@@ -486,11 +532,11 @@ export function ExpenseUsageSection({
         </button>
       </div>
 
-      <div className="mb-3 flex gap-2">
+      <div className="mb-2 flex gap-2">
         <button
           type="button"
           onClick={() => void handleSortModeChange("date")}
-          className={`flex-1 rounded-[10px] px-2 py-2 text-sm ${
+          className={`h-10 flex-1 rounded-[10px] px-2 text-sm ${
             sortMode === "date"
               ? "bg-brand-green text-white"
               : "border border-brand-border bg-brand-surface text-brand-ink"
@@ -501,7 +547,7 @@ export function ExpenseUsageSection({
         <button
           type="button"
           onClick={() => void handleSortModeChange("manual")}
-          className={`flex-1 rounded-[10px] px-2 py-2 text-sm ${
+          className={`h-10 flex-1 rounded-[10px] px-2 text-sm ${
             sortMode === "manual"
               ? "bg-brand-green text-white"
               : "border border-brand-border bg-brand-surface text-brand-ink"
@@ -511,13 +557,14 @@ export function ExpenseUsageSection({
         </button>
       </div>
 
-      <label className="mb-3 flex flex-col gap-1 text-sm text-brand-muted">
+      <label className="mb-2 flex flex-col gap-1 text-sm text-brand-muted">
         항목 필터
         <select
           value={categoryFilter}
-          onChange={(e) =>
-            setCategoryFilter(e.target.value as CategoryCode | "all")
-          }
+          onChange={(e) => {
+            setCategoryFilter(e.target.value as CategoryCode | "all");
+            setListExpanded(false);
+          }}
           className="h-10 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
         >
           <option value="all">전체 항목</option>
@@ -538,21 +585,37 @@ export function ExpenseUsageSection({
       )}
 
       {!loadingList && !listError && (
-        <div className="mb-4 rounded-[12px] bg-brand-yellow px-4 py-3 text-brand-ink">
-          <p className="text-sm font-medium">
-            {categoryFilter === "all" ? "총 사용금액" : "필터된 사용금액"}
-          </p>
-          <p className="mt-0.5 font-mono text-[1.75rem] font-bold tabular-nums sm:text-[1.875rem]">
-            {new Intl.NumberFormat("ko-KR").format(
-              categoryFilter === "all" ? monthTotal : filteredTotal,
+        <div className="mb-3 rounded-[12px] bg-brand-yellow px-3 py-2.5 text-brand-ink lg:flex lg:items-stretch lg:gap-4">
+          <div className="min-w-0 lg:flex-1">
+            <p className="text-xs font-medium sm:text-sm">총 사용금액</p>
+            <p className="mt-0.5 font-mono text-xl font-bold tabular-nums sm:text-2xl">
+              {formatWon(monthTotal)}
+            </p>
+            <p className="mt-0.5 text-xs sm:text-sm">{entries.length}건 기록</p>
+            {categoryFilter !== "all" && (
+              <p className="mt-1 text-xs text-brand-ink/80 sm:text-sm">
+                선택 항목 기준 {formatWon(filteredTotal)} · {filtered.length}건
+              </p>
             )}
-            <span className="ml-0.5 text-base font-sans font-semibold">원</span>
-          </p>
-          <p className="mt-1 text-sm">
-            {categoryFilter === "all"
-              ? `${entries.length}건 기록`
-              : `${filtered.length}건 · 전체 ${entries.length}건`}
-          </p>
+          </div>
+          <div className="mt-2 border-t border-brand-ink/10 pt-2 lg:mt-0 lg:flex-1 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            <p className="text-xs font-medium sm:text-sm">
+              요일별 사용금액
+              {categoryFilter !== "all" ? " · 선택 항목 기준" : ""}
+            </p>
+            <div className="mt-1.5 grid grid-cols-4 gap-x-1.5 gap-y-2 lg:grid-cols-7 lg:gap-2">
+              {WEEKDAY_DISPLAY_ORDER.map(({ jsDay, label }) => (
+                <div key={label} className="min-w-0">
+                  <p className="text-[11px] font-medium text-brand-ink/70 sm:text-xs">
+                    {label}
+                  </p>
+                  <p className="mt-0.5 break-words font-mono text-[11px] font-semibold tabular-nums leading-tight sm:text-xs">
+                    {formatWon(weekdaySums[jsDay] ?? 0)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -593,16 +656,20 @@ export function ExpenseUsageSection({
           아직 기록이 없어요. 첫 사용내역을 남겨보세요.
         </p>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={displayList.map((e) => e.id)}
-            strategy={verticalListSortingStrategy}
+        <div ref={listTopRef}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <ul className="flex flex-col gap-2">
+            <SortableContext
+              items={displayList.map((e) => e.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul
+                id={EXPENSE_LIST_ID}
+                className="flex flex-col gap-1.5"
+              >
               {displayList.map((entry, index) => (
                 <SortableRow
                   key={entry.id}
@@ -631,15 +698,20 @@ export function ExpenseUsageSection({
             </ul>
           </SortableContext>
         </DndContext>
+        </div>
       )}
 
-      {filtered.length > MOBILE_COLLAPSED && !listExpanded && (
+      {showExpandToggle && (
         <button
           type="button"
-          onClick={() => setListExpanded(true)}
-          className="mt-3 w-full rounded-[10px] border border-brand-border bg-brand-surface py-2.5 text-sm text-brand-green lg:hidden"
+          onClick={toggleListExpanded}
+          aria-expanded={listExpanded}
+          aria-controls={EXPENSE_LIST_ID}
+          className="mt-2 w-full rounded-[10px] border border-brand-border bg-brand-surface py-2 text-sm text-brand-green"
         >
-          전체 내역 보기 · {filtered.length}건
+          {listExpanded
+            ? "접기 · 3건만 보기"
+            : `전체 내역 보기 · ${filtered.length}건`}
         </button>
       )}
 

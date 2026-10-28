@@ -95,6 +95,7 @@ export function buildAnalysisPrompt(
 당신은 가계부 지출 분석기입니다. 대화를 읽고 반드시 JSON만 출력합니다.
 
 규칙:
+- 통계·조회 질문(얼마 썼어, 뭐 샀더라, 가장 많이 쓴 항목 등)은 이 JSON 분석 대상이 아닙니다. 지출을 새로 적으려는 경우만 처리합니다.
 - 지출 기록 의도가 있으면 action을 "save"로 설정합니다.
 - 날짜(YYYY-MM-DD), 금액(원, 정수), description(지출 내용), note(참고, 없으면 null)을 추출합니다.
 - category_code는 meal, student_snack, books_stationery, math_tools, academy_supplies, promotion, instructor_hiring, ai_service, transport, golf, travel, entertainment, personal_items, other 중 하나 또는 null(불확실).

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { classifyChatIntent } from "@/lib/chat-intent";
 import { getCategoryLabel } from "@/lib/categories";
 import { resolveCategory } from "@/lib/classify-expense";
+import { fetchAllExpensesForStats } from "@/lib/fetch-all-expenses";
 import {
   buildAnalysisPrompt,
   formatSavedMessage,
@@ -9,7 +11,15 @@ import {
   todayISO,
   type ChatMessageInput,
 } from "@/lib/gemini-expense";
-import { generateJsonWithFallback, mapGeminiError } from "@/lib/gemini-client";
+import {
+  buildStatsAnswerPrompt,
+  formatExpensesForStats,
+} from "@/lib/gemini-stats";
+import {
+  generateJsonWithFallback,
+  generateTextWithFallback,
+  mapGeminiError,
+} from "@/lib/gemini-client";
 import { EXPENSE_SELECT } from "@/lib/supabase/client";
 import { isAuthError, requireUser } from "@/lib/supabase/route-auth";
 
@@ -50,6 +60,43 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (isAuthError(auth)) return auth;
   const { supabase, user } = auth;
+
+  const intent = classifyChatIntent(last.content);
+
+  if (intent === "stats") {
+    try {
+      const { rows, error: allError } =
+        await fetchAllExpensesForStats(supabase);
+      if (allError) {
+        return NextResponse.json(
+          { error: "지출 내역을 불러오지 못했습니다." },
+          { status: 500 },
+        );
+      }
+
+      const table = formatExpensesForStats(rows);
+      const prompt = buildStatsAnswerPrompt(
+        todayISO(),
+        table,
+        rows.length,
+        messages,
+      );
+      const reply = await generateTextWithFallback(apiKey, prompt);
+
+      return NextResponse.json({
+        reply: reply || "답변을 만들지 못했어요. 다시 질문해 주세요.",
+        statsAnswer: true,
+      });
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[api] Gemini stats error:", err);
+      }
+      return NextResponse.json(
+        { error: mapGeminiError(err) },
+        { status: 502 },
+      );
+    }
+  }
 
   const { data: expenses, error: fetchError } = await supabase
     .from("expenses")

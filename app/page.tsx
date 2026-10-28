@@ -20,7 +20,7 @@ type ChatMessage = {
 };
 
 const WELCOME =
-  "법카 사용내역을 한 줄로 남겨보세요.\n예: 오늘 교재 구입 26,500원";
+  "법카 사용내역을 한 줄로 남기거나 통계를 물어보세요.\n예: 오늘 교재 구입 26,500원\n예: 이번 달 총 지출이 얼마야?";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -146,24 +146,15 @@ export default function Home() {
 
   return (
     <div className="flex min-h-[100dvh] min-w-0 flex-col bg-brand-page-bg">
-      <header
-        className="shrink-0 border-b border-brand-border bg-brand-surface px-4 py-3 pr-14 sm:px-5 sm:pr-16"
-      >
-        <div className="mx-auto flex max-w-6xl min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <span
-              className="mt-1.5 h-3 w-3 shrink-0 rounded-[3px] bg-brand-green"
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold leading-tight text-brand-ink sm:text-[1.375rem]">
-                UNITHE 법카노트
-              </h1>
-              <p className="mt-0.5 text-sm leading-snug text-brand-muted sm:text-[0.9375rem]">
-                한 줄로 기록하는 유니더수학 법인카드 사용내역
-              </p>
-            </div>
-          </div>
+      <header className="shrink-0 border-b border-brand-border bg-brand-surface px-4 py-2.5">
+        <div className="mx-auto flex max-w-6xl min-w-0 items-center gap-2">
+          <span
+            className="h-3 w-3 shrink-0 rounded-[3px] bg-brand-green"
+            aria-hidden
+          />
+          <h1 className="min-w-0 flex-1 whitespace-nowrap text-[1.125rem] font-bold leading-none tracking-tight text-brand-ink min-[360px]:text-[1.25rem] sm:text-[1.375rem]">
+            UNITHE 법카노트
+          </h1>
           <LogoutButton />
         </div>
       </header>

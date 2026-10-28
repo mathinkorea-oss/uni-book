@@ -7,6 +7,36 @@ const DEFAULT_MODELS = [
   "gemini-2.5-flash-lite",
 ].filter((m): m is string => Boolean(m));
 
+export async function generateTextWithFallback(
+  apiKey: string,
+  prompt: string,
+): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const tried: string[] = [];
+  let lastError: unknown;
+
+  for (const modelName of DEFAULT_MODELS) {
+    tried.push(modelName);
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (err) {
+      lastError = err;
+      const status = getErrorStatus(err);
+      if (status === 429) {
+        throw new QuotaExceededError();
+      }
+      if (status === 401 || status === 403) {
+        throw new InvalidApiKeyError();
+      }
+      continue;
+    }
+  }
+
+  throw lastError ?? new Error(`No model available (tried: ${tried.join(", ")})`);
+}
+
 export async function generateJsonWithFallback(
   apiKey: string,
   prompt: string,

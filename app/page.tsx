@@ -53,6 +53,13 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  }, [input]);
+
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault();
     const text = input.trim();
@@ -240,23 +247,31 @@ export default function Home() {
             onSubmit={handleSend}
             className="shrink-0 border-t border-brand-border bg-brand-surface px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4"
           >
-            <div className="mx-auto flex w-full max-w-xl min-w-0 items-end gap-2">
-              <label className="sr-only" htmlFor="chat-input">사용내역 입력</label>
+            <div className="mx-auto flex w-full max-w-xl min-w-0 items-end gap-1.5 sm:gap-2">
               <textarea
                 id="chat-input"
                 ref={inputRef}
-                rows={1}
+                rows={2}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onFocus={() => {
+                  window.setTimeout(() => {
+                    inputRef.current?.scrollIntoView({
+                      block: "nearest",
+                      behavior: "smooth",
+                    });
+                  }, 280);
+                }}
                 placeholder="언제, 어디에, 얼마를 사용했나요?"
                 disabled={sending}
-                className="max-h-28 min-h-12 min-w-0 flex-1 resize-none rounded-[12px] border border-brand-border bg-brand-surface px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 disabled:opacity-70"
+                aria-label="언제, 어디에, 얼마를 사용했나요?"
+                className="max-h-28 min-h-[3.25rem] min-w-0 flex-1 resize-none overflow-y-auto rounded-[12px] border border-brand-border bg-brand-surface px-3.5 py-3 text-base leading-normal text-brand-ink outline-none placeholder:text-[#737B75] focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 disabled:opacity-70"
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                className="h-12 shrink-0 rounded-[12px] bg-brand-green px-4 text-base font-medium text-white hover:bg-brand-green-hover disabled:cursor-not-allowed disabled:bg-[#a8c4b4] sm:px-5"
+                className="h-11 min-h-11 shrink-0 rounded-[12px] bg-brand-green px-3 text-sm font-medium text-white hover:bg-brand-green-hover disabled:cursor-not-allowed disabled:bg-[#a8c4b4] sm:px-4 sm:text-base"
               >
                 {sending ? "기록 중…" : "기록하기"}
               </button>

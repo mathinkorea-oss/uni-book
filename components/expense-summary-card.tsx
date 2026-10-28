@@ -1,12 +1,15 @@
 "use client";
 
 import type { CategoryCode } from "@/lib/categories";
+import { ExpandToggleButton } from "@/components/expand-toggle-button";
 import {
   formatAmountNumber,
   formatWon,
   WEEKDAY_DISPLAY_ORDER,
 } from "@/lib/expense-date";
 import { formatMonthLabel, type ViewMonth } from "@/lib/month";
+
+const WEEKDAY_PANEL_ID = "expense-weekday-breakdown";
 
 type Props = {
   viewMonth: ViewMonth;
@@ -16,6 +19,8 @@ type Props = {
   filteredTotal: number;
   filteredCount: number;
   weekdaySums: Record<number, number>;
+  weekdayExpanded: boolean;
+  onWeekdayExpandedChange: (expanded: boolean) => void;
 };
 
 export function ExpenseSummaryCard({
@@ -26,6 +31,8 @@ export function ExpenseSummaryCard({
   filteredTotal,
   filteredCount,
   weekdaySums,
+  weekdayExpanded,
+  onWeekdayExpandedChange,
 }: Props) {
   const filterActive = categoryFilter !== "all";
 
@@ -48,9 +55,7 @@ export function ExpenseSummaryCard({
             원
           </span>
         </p>
-        <p className="mt-1.5 text-sm text-brand-ink/85">
-          총 {entryCount}건
-        </p>
+        <p className="mt-1.5 text-sm text-brand-ink/85">총 {entryCount}건</p>
         {filterActive && (
           <p className="mt-2 text-sm text-brand-ink/80">
             선택 항목 기준 {formatWon(filteredTotal)} · {filteredCount}건
@@ -58,51 +63,70 @@ export function ExpenseSummaryCard({
         )}
       </section>
 
-      <section className="border-t border-brand-border bg-brand-saved-bg px-4 py-3 sm:px-5 lg:flex-1 lg:border-l lg:border-t-0 lg:py-4">
-        <div>
-          <p className="text-sm font-semibold text-brand-ink">요일별 사용금액</p>
-          <p className="mt-0.5 text-xs text-brand-muted">
-            선택한 월 기준
-            {filterActive ? " · 선택 항목 기준" : ""}
-          </p>
+      <section
+        className={`border-t border-brand-border bg-brand-saved-bg sm:px-5 lg:flex-1 lg:border-l lg:border-t-0 ${
+          weekdayExpanded ? "px-4 py-3 lg:py-4" : "px-4 py-2.5 lg:py-3"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-brand-ink">
+              요일별 사용금액
+            </p>
+            <p className="mt-0.5 text-xs text-brand-muted">
+              선택한 월 기준
+              {filterActive ? " · 선택 항목 기준" : ""}
+            </p>
+          </div>
+          <ExpandToggleButton
+            expanded={weekdayExpanded}
+            onToggle={() => onWeekdayExpandedChange(!weekdayExpanded)}
+            controlsId={WEEKDAY_PANEL_ID}
+          />
         </div>
-        <ul className="mt-2.5 space-y-0.5" aria-label="요일별 사용금액">
-          {WEEKDAY_DISPLAY_ORDER.map(({ jsDay, label }) => {
-            const amount = weekdaySums[jsDay] ?? 0;
-            const isPeak = weekdayMax > 0 && amount === weekdayMax;
-            const barPct =
-              weekdayMax > 0 ? Math.round((amount / weekdayMax) * 100) : 0;
+        {weekdayExpanded && (
+          <ul
+            id={WEEKDAY_PANEL_ID}
+            className="mt-2.5 space-y-0.5"
+            aria-label="요일별 사용금액"
+          >
+            {WEEKDAY_DISPLAY_ORDER.map(({ jsDay, label }) => {
+              const amount = weekdaySums[jsDay] ?? 0;
+              const isPeak = weekdayMax > 0 && amount === weekdayMax;
+              const barPct =
+                weekdayMax > 0 ? Math.round((amount / weekdayMax) * 100) : 0;
 
-            return (
-              <li
-                key={label}
-                className="grid h-[2rem] grid-cols-[1.125rem_minmax(0,1fr)_minmax(4.75rem,auto)] items-center gap-x-2 sm:h-[2.125rem] sm:grid-cols-[1.25rem_minmax(0,1fr)_minmax(5.25rem,auto)] sm:gap-x-2.5"
-              >
-                <span
-                  className={`text-sm text-brand-ink ${isPeak ? "font-bold" : "font-medium"}`}
+              return (
+                <li
+                  key={label}
+                  className="grid h-[2rem] grid-cols-[1.125rem_minmax(0,1fr)_minmax(4.75rem,auto)] items-center gap-x-2 sm:h-[2.125rem] sm:grid-cols-[1.25rem_minmax(0,1fr)_minmax(5.25rem,auto)] sm:gap-x-2.5"
                 >
-                  {label}
-                </span>
-                <div
-                  className="h-2 min-w-0 rounded-full bg-[#e4ebe6]"
-                  role="presentation"
-                >
+                  <span
+                    className={`text-sm text-brand-ink ${isPeak ? "font-bold" : "font-medium"}`}
+                  >
+                    {label}
+                  </span>
                   <div
-                    className="h-full rounded-full bg-brand-green"
-                    style={{ width: `${barPct}%` }}
-                  />
-                </div>
-                <span
-                  className={`text-right font-mono text-[15px] tabular-nums leading-none text-brand-ink sm:text-base ${
-                    isPeak ? "font-bold" : "font-semibold"
-                  }`}
-                >
-                  {formatWon(amount)}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                    className="h-2 min-w-0 rounded-full bg-[#e4ebe6]"
+                    role="presentation"
+                  >
+                    <div
+                      className="h-full rounded-full bg-brand-green"
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                  <span
+                    className={`text-right font-mono text-[15px] tabular-nums leading-none text-brand-ink sm:text-base ${
+                      isPeak ? "font-bold" : "font-semibold"
+                    }`}
+                  >
+                    {formatWon(amount)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </div>
   );

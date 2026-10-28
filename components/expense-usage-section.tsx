@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeleteExpenseDialog } from "@/components/delete-expense-dialog";
+import { ExpandToggleButton } from "@/components/expand-toggle-button";
 import { ExpenseEditSheet } from "@/components/expense-edit-sheet";
 import { ExpenseSummaryCard } from "@/components/expense-summary-card";
 import {
@@ -49,6 +50,11 @@ import {
   type ViewMonth,
 } from "@/lib/month";
 import { EXPENSE_SELECT, type ExpenseRow, supabase } from "@/lib/supabase/client";
+import {
+  readUiPref,
+  UI_PREF_KEYS,
+  writeUiPref,
+} from "@/lib/ui-prefs";
 
 const MOBILE_COLLAPSED = 3;
 const EXPENSE_LIST_ID = "expense-usage-list";
@@ -264,6 +270,9 @@ export function ExpenseUsageSection({
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [weekdayExpanded, setWeekdayExpanded] = useState(false);
+  const [usageListVisible, setUsageListVisible] = useState(true);
   const listTopRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
@@ -305,6 +314,21 @@ export function ExpenseUsageSection({
 
   useEffect(() => {
     setViewMonth((prev) => prev ?? getCurrentViewMonth());
+  }, []);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      const id = data.user?.id ?? null;
+      setUserId(id);
+      if (id) {
+        setWeekdayExpanded(
+          readUiPref(id, UI_PREF_KEYS.weekdayExpanded, false),
+        );
+        setUsageListVisible(
+          readUiPref(id, UI_PREF_KEYS.usageListVisible, true),
+        );
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -350,7 +374,27 @@ export function ExpenseUsageSection({
   }, [filtered, showFullList]);
 
   const showExpandToggle =
-    sortMode !== "manual" && filtered.length > MOBILE_COLLAPSED;
+    usageListVisible &&
+    sortMode !== "manual" &&
+    filtered.length > MOBILE_COLLAPSED;
+
+  const setWeekdayExpandedPersist = useCallback(
+    (expanded: boolean) => {
+      setWeekdayExpanded(expanded);
+      writeUiPref(userId, UI_PREF_KEYS.weekdayExpanded, expanded);
+    },
+    [userId],
+  );
+
+  const toggleUsageListVisible = useCallback(() => {
+    if (sortMode === "manual") return;
+    setUsageListVisible((prev) => {
+      const next = !prev;
+      if (next) setListExpanded(false);
+      writeUiPref(userId, UI_PREF_KEYS.usageListVisible, next);
+      return next;
+    });
+  }, [userId, sortMode]);
 
   function toggleListExpanded() {
     if (sortMode === "manual") return;
@@ -400,12 +444,16 @@ export function ExpenseUsageSection({
   async function handleSortModeChange(mode: SortMode) {
     if (mode === "manual") {
       setSortMode(mode);
+      setUsageListVisible(true);
+      writeUiPref(userId, UI_PREF_KEYS.usageListVisible, true);
       setListExpanded(true);
       if (entries.length && entries.some((e) => e.sort_order == null)) {
         await ensureManualSortInitialized();
       }
     } else {
       setSortMode(mode);
+      setUsageListVisible(true);
+      writeUiPref(userId, UI_PREF_KEYS.usageListVisible, true);
       setListExpanded(false);
     }
   }
@@ -592,6 +640,8 @@ export function ExpenseUsageSection({
           filteredTotal={filteredTotal}
           filteredCount={filtered.length}
           weekdaySums={weekdaySums}
+          weekdayExpanded={weekdayExpanded}
+          onWeekdayExpandedChange={setWeekdayExpandedPersist}
         />
       )}
 
@@ -623,16 +673,41 @@ export function ExpenseUsageSection({
         <p className="mb-2 text-sm text-[#b3261e]" role="alert">{deleteError}</p>
       )}
 
-      {loadingList ? (
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-brand-ink">최근 사용내역</h3>
+          <p className="text-xs text-brand-muted">
+            {loadingList ? "…" : `${filtered.length}건`}
+          </p>
+        </div>
+        {sortMode !== "manual" && (
+          <ExpandToggleButton
+            expanded={usageListVisible}
+            onToggle={toggleUsageListVisible}
+            controlsId={EXPENSE_LIST_ID}
+          />
+        )}
+      </div>
+
+      {sortMode === "manual" && (
+        <p className="mb-2 text-xs leading-relaxed text-brand-muted">
+          직접 정렬 중에는 목록을 숨길 수 없어요. 날짜순으로 바꾸면 다시 접을 수
+          있습니다.
+        </p>
+      )}
+
+      {usageListVisible && loadingList ? (
         <p className="text-sm text-brand-muted">불러오는 중…</p>
-      ) : listError ? (
+      ) : usageListVisible && listError ? (
         <p className="text-sm text-[#b3261e]">{listError}</p>
-      ) : filtered.length === 0 ? (
+      ) : usageListVisible && filtered.length === 0 ? (
         <p className="text-sm text-brand-muted">
           아직 기록이 없어요. 첫 사용내역을 남겨보세요.
         </p>
-      ) : (
-        <div ref={listTopRef}>
+      ) : null}
+
+      <div id={EXPENSE_LIST_ID} ref={listTopRef}>
+        {usageListVisible && !loadingList && !listError && filtered.length > 0 ? (
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -642,11 +717,8 @@ export function ExpenseUsageSection({
               items={displayList.map((e) => e.id)}
               strategy={verticalListSortingStrategy}
             >
-              <ul
-                id={EXPENSE_LIST_ID}
-                className="flex flex-col gap-1.5"
-              >
-              {displayList.map((entry, index) => (
+              <ul className="flex flex-col gap-1.5">
+              {displayList.map((entry) => (
                 <SortableRow
                   key={entry.id}
                   entry={entry}
@@ -674,8 +746,8 @@ export function ExpenseUsageSection({
             </ul>
           </SortableContext>
         </DndContext>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {showExpandToggle && (
         <button

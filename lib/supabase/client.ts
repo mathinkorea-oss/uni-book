@@ -1,17 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    "Supabase 환경 변수가 없습니다. .env.local에 NEXT_PUBLIC_SUPABASE_URL과 API 키를 설정해 주세요.",
-  );
+export function createClient() {
+  return createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey());
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+/** Browser singleton (client components only). */
+export const supabase = createClient();
 
 export type ExpenseRow = {
   id: string;
@@ -19,4 +14,13 @@ export type ExpenseRow = {
   date: string;
   amount: number;
   description: string;
+  user_id?: string | null;
+  note?: string | null;
+  category_code?: string | null;
+  category_needs_review?: boolean | null;
+  category_user_set?: boolean | null;
+  sort_order?: number | null;
 };
+
+export const EXPENSE_SELECT =
+  "id, created_at, date, amount, description, user_id, note, category_code, category_needs_review, category_user_set, sort_order";

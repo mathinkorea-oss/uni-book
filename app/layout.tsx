@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "유니더 스마트 사용내역",
-  description: "법인 카드 지출 가계부",
+  title: "UNITHE 법카노트",
+  description: "한 줄로 기록하는 유니더수학 법인카드 사용내역",
 };
 
 export const viewport = {

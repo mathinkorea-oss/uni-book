@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "UNITHE 법카노트",
   description: "한 줄로 기록하는 유니더수학 법인카드 사용내역",
+  applicationName: "UNITHE 법카노트",
+  appleWebApp: {
+    capable: true,
+    title: "법카노트",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport = {

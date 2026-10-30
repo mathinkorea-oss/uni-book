@@ -6,6 +6,7 @@ import {
   type UsageSectionHandle,
 } from "@/components/expense-usage-section";
 import { CardSmsSheet } from "@/components/card-sms-sheet";
+import { ExpenseRecordInput } from "@/components/expense-record-input";
 import { LogoutButton } from "@/components/logout-button";
 import {
   formatMonthLabel,
@@ -21,7 +22,7 @@ type ChatMessage = {
 };
 
 const WELCOME =
-  "법카 사용내역을 한 줄로 남기거나 통계를 물어보세요.\n예: 오늘 교재 구입 26,500원\n예: 이번 달 총 지출이 얼마야?";
+  "카드 문자를 붙여넣거나 사용내역을 직접 입력하세요.";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -33,9 +34,11 @@ export default function Home() {
   );
   const [cardSmsOpen, setCardSmsOpen] = useState(false);
 
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const usageRef = useRef<UsageSectionHandle | null>(null);
+  const prevMessageCount = useRef(0);
 
   const handleUsageReady = useCallback((handle: UsageSectionHandle) => {
     usageRef.current = handle;
@@ -52,15 +55,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
-
-  useEffect(() => {
-    const el = inputRef.current;
+    const el = chatScrollRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
-  }, [input]);
+    if (messages.length <= prevMessageCount.current) return;
+    prevMessageCount.current = messages.length;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, sending]);
 
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault();
@@ -146,13 +146,6 @@ export default function Home() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
-  }
-
   async function handleCardSmsSaved(date: string) {
     const savedVm = viewMonthFromExpenseDate(date);
     if (savedVm) {
@@ -204,37 +197,49 @@ export default function Home() {
             onSavedOtherMonthChange={setSavedOtherMonth}
             onMonthMovedNotice={setMonthMovedNotice}
             onReady={handleUsageReady}
+            recordInput={
+              <ExpenseRecordInput
+                input={input}
+                sending={sending}
+                onInputChange={setInput}
+                onSubmit={handleSend}
+                onOpenCardSms={() => setCardSmsOpen(true)}
+                inputRef={inputRef}
+              />
+            }
           />
         </aside>
 
         <section
-          className="flex min-h-[min(52vh,520px)] min-w-0 flex-1 flex-col bg-brand-surface lg:min-h-0"
+          className="flex min-h-0 min-w-0 flex-1 flex-col bg-brand-surface lg:min-h-0"
           aria-label="기록 대화"
         >
           <div
-            className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 lg:py-4"
+            ref={chatScrollRef}
+            className="min-h-[min(40vh,360px)] flex-1 overflow-y-auto px-3 py-3 sm:px-4 lg:min-h-0 lg:py-4"
             role="log"
             aria-live="polite"
           >
-            <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-2.5 pb-4">
+            <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-2 pb-2">
               {messages.map((msg) => {
                 const isUser = msg.role === "user";
+                const isWelcome = msg.id === "welcome";
                 return (
                   <div
                     key={msg.id}
                     className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[90%] min-w-0 whitespace-pre-wrap rounded-[12px] px-3.5 py-2.5 text-base leading-relaxed ${
-                        isUser
-                          ? "rounded-br-[4px] bg-brand-user-bubble text-brand-ink"
-                          : "rounded-bl-[4px] bg-brand-bot-bubble text-brand-ink"
+                      className={`max-w-[90%] min-w-0 whitespace-pre-wrap text-base leading-relaxed ${
+                        isWelcome
+                          ? "rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-3 py-2 text-[0.9375rem] leading-snug text-brand-ink"
+                          : isUser
+                            ? "rounded-[12px] rounded-br-[4px] bg-brand-user-bubble px-3.5 py-2.5 text-brand-ink"
+                            : "rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-3.5 py-2.5 text-brand-ink"
                       }`}
                     >
                       {msg.savedSuccess && (
-                        <p
-                          className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-brand-green"
-                        >
+                        <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-brand-green">
                           <span
                             aria-hidden
                             className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand-green text-[10px] text-white"
@@ -251,60 +256,14 @@ export default function Home() {
               })}
               {sending && (
                 <div className="flex justify-start">
-                  <div
-                    className="rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-4 py-2.5 text-sm text-brand-muted"
-                  >
+                  <div className="rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-4 py-2.5 text-sm text-brand-muted">
                     기록 중…
                   </div>
                 </div>
               )}
-              <div ref={chatEndRef} className="h-2 shrink-0" />
+              <div ref={chatEndRef} className="h-1 shrink-0" aria-hidden />
             </div>
           </div>
-
-          <form
-            onSubmit={handleSend}
-            className="shrink-0 border-t border-brand-border bg-brand-surface px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4"
-          >
-            <div className="mx-auto mb-2 flex w-full max-w-xl min-w-0">
-              <button
-                type="button"
-                onClick={() => setCardSmsOpen(true)}
-                className="h-11 min-h-11 w-full rounded-[12px] border border-brand-border bg-brand-surface text-base text-brand-ink"
-              >
-                카드 문자 붙여넣기
-              </button>
-            </div>
-            <div className="mx-auto flex w-full max-w-xl min-w-0 items-end gap-1.5 sm:gap-2">
-              <textarea
-                id="chat-input"
-                ref={inputRef}
-                rows={2}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onFocus={() => {
-                  window.setTimeout(() => {
-                    inputRef.current?.scrollIntoView({
-                      block: "nearest",
-                      behavior: "smooth",
-                    });
-                  }, 280);
-                }}
-                placeholder="언제, 어디에, 얼마를 사용했나요?"
-                disabled={sending}
-                aria-label="언제, 어디에, 얼마를 사용했나요?"
-                className="max-h-28 min-h-[3.25rem] min-w-0 flex-1 resize-none overflow-y-auto rounded-[12px] border border-brand-border bg-brand-surface px-3.5 py-3 text-base leading-normal text-brand-ink outline-none placeholder:text-[#737B75] focus:border-brand-green focus:ring-2 focus:ring-brand-green/20 disabled:opacity-70"
-              />
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="h-11 min-h-11 shrink-0 rounded-[12px] bg-brand-green px-3 text-sm font-medium text-white hover:bg-brand-green-hover disabled:cursor-not-allowed disabled:bg-[#a8c4b4] sm:px-4 sm:text-base"
-              >
-                {sending ? "기록 중…" : "기록하기"}
-              </button>
-            </div>
-          </form>
         </section>
       </div>
 

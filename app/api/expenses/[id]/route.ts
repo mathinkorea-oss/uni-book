@@ -85,11 +85,9 @@ export async function DELETE(
   const { id } = await context.params;
   const { supabase } = auth;
 
-  const { data, error } = await supabase
-    .from("expenses")
-    .delete()
-    .eq("id", id)
-    .select("id");
+  const { data, error } = await supabase.rpc("delete_expense_with_sms_marker", {
+    p_expense_id: id,
+  });
 
   if (error) {
     return NextResponse.json(
@@ -98,12 +96,13 @@ export async function DELETE(
     );
   }
 
-  if (!data?.length) {
+  const result = data as { ok?: boolean; reason?: string; id?: string } | null;
+  if (!result?.ok) {
     return NextResponse.json(
       { error: "삭제할 수 없습니다. 내 기록만 삭제할 수 있습니다." },
       { status: 403 },
     );
   }
 
-  return NextResponse.json({ deleted: true, id: data[0].id });
+  return NextResponse.json({ deleted: true, id: result.id ?? id });
 }

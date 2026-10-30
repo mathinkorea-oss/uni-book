@@ -5,6 +5,7 @@ import {
   ExpenseUsageSection,
   type UsageSectionHandle,
 } from "@/components/expense-usage-section";
+import { CardSmsSheet } from "@/components/card-sms-sheet";
 import { LogoutButton } from "@/components/logout-button";
 import {
   formatMonthLabel,
@@ -30,6 +31,7 @@ export default function Home() {
   const [monthMovedNotice, setMonthMovedNotice] = useState<ViewMonth | null>(
     null,
   );
+  const [cardSmsOpen, setCardSmsOpen] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -151,6 +153,23 @@ export default function Home() {
     }
   }
 
+  async function handleCardSmsSaved(date: string) {
+    const savedVm = viewMonthFromExpenseDate(date);
+    if (savedVm) {
+      setSavedOtherMonth(savedVm);
+    }
+    await usageRef.current?.reload();
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "카드 승인 문자를 지출로 저장했습니다.",
+        savedSuccess: true,
+      },
+    ]);
+  }
+
   return (
     <div className="flex min-h-[100dvh] min-w-0 flex-col bg-brand-page-bg">
       <header className="shrink-0 border-b border-brand-border bg-brand-surface px-4 py-2.5">
@@ -247,6 +266,15 @@ export default function Home() {
             onSubmit={handleSend}
             className="shrink-0 border-t border-brand-border bg-brand-surface px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4"
           >
+            <div className="mx-auto mb-2 flex w-full max-w-xl min-w-0">
+              <button
+                type="button"
+                onClick={() => setCardSmsOpen(true)}
+                className="h-11 min-h-11 w-full rounded-[12px] border border-brand-border bg-brand-surface text-base text-brand-ink"
+              >
+                카드 문자 붙여넣기
+              </button>
+            </div>
             <div className="mx-auto flex w-full max-w-xl min-w-0 items-end gap-1.5 sm:gap-2">
               <textarea
                 id="chat-input"
@@ -279,6 +307,15 @@ export default function Home() {
           </form>
         </section>
       </div>
+
+      <CardSmsSheet
+        open={cardSmsOpen}
+        onClose={() => setCardSmsOpen(false)}
+        getSortMode={() => usageRef.current?.getSortMode() ?? "date"}
+        onSaved={(expense, date) => {
+          void handleCardSmsSaved(date);
+        }}
+      />
     </div>
   );
 }

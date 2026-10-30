@@ -21,9 +21,6 @@ type ChatMessage = {
   savedSuccess?: boolean;
 };
 
-const WELCOME =
-  "카드 문자를 붙여넣거나 사용내역을 직접 입력하세요.";
-
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -44,15 +41,7 @@ export default function Home() {
     usageRef.current = handle;
   }, []);
 
-  useEffect(() => {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content: WELCOME,
-      },
-    ]);
-  }, []);
+  const showChatPanel = messages.length > 0 || sending;
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -189,7 +178,9 @@ export default function Home() {
 
       <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-row lg:overflow-hidden">
         <aside
-          className="w-full shrink-0 border-b border-brand-border lg:w-[min(440px,42%)] lg:overflow-y-auto lg:border-b-0 lg:border-r"
+          className={`w-full shrink-0 border-b border-brand-border lg:overflow-y-auto lg:border-b-0 lg:border-r ${
+            showChatPanel ? "lg:w-[min(440px,42%)]" : "lg:flex-1 lg:border-r-0"
+          }`}
           aria-label="월별 사용내역"
         >
           <ExpenseUsageSection
@@ -210,32 +201,30 @@ export default function Home() {
           />
         </aside>
 
+        {showChatPanel && (
         <section
           className="flex min-h-0 min-w-0 flex-1 flex-col bg-brand-surface lg:min-h-0"
           aria-label="기록 대화"
         >
           <div
             ref={chatScrollRef}
-            className="min-h-[min(40vh,360px)] flex-1 overflow-y-auto px-3 py-3 sm:px-4 lg:min-h-0 lg:py-4"
+            className="max-h-[min(50vh,480px)] flex-1 overflow-y-auto px-3 py-3 sm:px-4 lg:max-h-none lg:min-h-0 lg:py-4"
             role="log"
             aria-live="polite"
           >
-            <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-2 pb-2">
+            <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-2">
               {messages.map((msg) => {
                 const isUser = msg.role === "user";
-                const isWelcome = msg.id === "welcome";
                 return (
                   <div
                     key={msg.id}
                     className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[90%] min-w-0 whitespace-pre-wrap text-base leading-relaxed ${
-                        isWelcome
-                          ? "rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-3 py-2 text-[0.9375rem] leading-snug text-brand-ink"
-                          : isUser
-                            ? "rounded-[12px] rounded-br-[4px] bg-brand-user-bubble px-3.5 py-2.5 text-brand-ink"
-                            : "rounded-[12px] rounded-bl-[4px] bg-brand-bot-bubble px-3.5 py-2.5 text-brand-ink"
+                      className={`max-w-[90%] min-w-0 whitespace-pre-wrap rounded-[12px] text-base leading-relaxed ${
+                        isUser
+                          ? "rounded-br-[4px] bg-brand-user-bubble px-3.5 py-2.5 text-brand-ink"
+                          : "rounded-bl-[4px] bg-brand-bot-bubble px-3.5 py-2.5 text-brand-ink"
                       }`}
                     >
                       {msg.savedSuccess && (
@@ -265,6 +254,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+        )}
       </div>
 
       <CardSmsSheet

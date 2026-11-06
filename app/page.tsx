@@ -161,7 +161,7 @@ export default function Home() {
             aria-hidden
           />
           <h1 className="min-w-0 flex-1 whitespace-nowrap text-[1.125rem] font-bold leading-none tracking-tight text-brand-ink min-[360px]:text-[1.25rem] sm:text-[1.375rem]">
-            UNITHE 법카노트
+            유니더노트
           </h1>
           <LogoutButton />
         </div>

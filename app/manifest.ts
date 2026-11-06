@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "UNITHE 법카노트",
-    short_name: "법카노트",
+    name: "유니더노트",
+    short_name: "유니더노트",
     description: "한 줄로 기록하는 유니더수학 법인카드 사용내역",
     start_url: "/",
     display: "standalone",

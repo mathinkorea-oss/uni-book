@@ -36,7 +36,7 @@ export default function LoginPage() {
             aria-hidden
           />
           <div>
-            <h1 className="text-xl font-bold text-brand-ink">UNITHE 법카노트</h1>
+            <h1 className="text-xl font-bold text-brand-ink">유니더노트</h1>
             <p className="mt-1 text-sm text-brand-muted">로그인 후 사용내역을 확인할 수 있습니다.</p>
           </div>
         </div>

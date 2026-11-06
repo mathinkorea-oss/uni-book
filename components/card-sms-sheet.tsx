@@ -467,7 +467,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                     setError(null);
                     setReRegisterPrompt(false);
                   }}
-                  className="h-11 flex-1 rounded-[12px] border border-brand-border text-base text-brand-ink"
+                  className="box-border flex min-h-12 h-12 flex-1 shrink-0 items-center justify-center rounded-[12px] border border-brand-border text-base leading-none text-brand-ink"
                 >
                   취소
                 </button>
@@ -478,7 +478,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                     onClick={() =>
                       void savePayload({ confirmReRegister: true })
                     }
-                    className="h-11 flex-1 rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-60"
+                    className="box-border flex min-h-12 h-12 flex-1 shrink-0 items-center justify-center rounded-[12px] bg-brand-green text-base font-medium leading-none text-white disabled:opacity-60"
                   >
                     {saving ? "저장 중…" : "다시 등록"}
                   </button>
@@ -487,7 +487,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                     type="button"
                     disabled={saving || fuzzyCandidates.length > 0}
                     onClick={() => void savePayload()}
-                    className="h-11 flex-1 rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-60"
+                    className="box-border flex min-h-12 h-12 flex-1 shrink-0 items-center justify-center rounded-[12px] bg-brand-green text-base font-medium leading-none text-white disabled:opacity-60"
                   >
                     {saving ? "저장 중…" : "저장"}
                   </button>

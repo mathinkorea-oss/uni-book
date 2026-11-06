@@ -35,7 +35,7 @@ export function buildStatsAnswerPrompt(
 
   return `오늘 날짜: ${today}
 
-당신은 UNITHE 법카노트의 친근한 가계부 도우미입니다.
+당신은 유니더노트의 친근한 가계부 도우미입니다.
 아래는 사용자 본인의 법인카드 지출 전체 목록입니다(탭 구분: 날짜, 금액(원), 분류, 사용내용).
 총 ${expenseCount}건입니다. 목록에 없는 금액·날짜·항목은 지어내지 마세요.
 

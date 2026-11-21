@@ -126,6 +126,51 @@ npm run dev
 
 ---
 
-## 5. 배포 (Vercel 등)
+## 5. 비밀번호 재설정 (Dashboard 설정)
 
-프로덕션에 동일 Supabase env 설정 후 로그인·RLS·link 결과를 한 번 더 확인합니다.
+앱 경로: `/login/forgot-password` → 메일 링크 → `/login/update-password` (PKCE `?code=`는 화면에서 교환)
+
+### Authentication → URL Configuration
+
+| 항목 | 로컬 예시 | 프로덕션 (본인 도메인으로 교체) |
+|------|-----------|----------------------------------|
+| **Site URL** | `http://localhost:3000` | `https://<프로덕션-도메인>` |
+| **Redirect URLs** (각 줄 추가) | 아래 3개 | 동일 경로를 프로덕션 도메인으로 |
+
+**Redirect URLs에 반드시 추가:**
+
+1. `http://localhost:3000/login/update-password` (재설정 메일 `redirectTo`)
+2. `http://localhost:3000/auth/callback` (token_hash 이메일 템플릿용)
+3. `http://localhost:3000/login/recovery-redirect` (hash 방식 템플릿·Site URL만 `/`일 때 보조)
+
+프로덕션은 `https://<프로덕션-도메인>/login/update-password` 등으로 동일하게 추가합니다.  
+Vercel Preview를 쓰면 preview URL마다 위 세 경로를 추가합니다.
+
+**중요:** `redirectTo`와 Redirect URLs가 일치하지 않으면 Supabase가 Site URL(`/`)로만 돌려 보내고, 미인증 상태에서 `/login`으로 리다이렉트될 수 있습니다.
+
+### Vercel 환경 변수 (권장)
+
+| 변수 | 용도 |
+|------|------|
+| `NEXT_PUBLIC_SITE_URL` | `https://<프로덕션-도메인>` — 재설정 메일의 `redirectTo`에 사용 (미설정 시 요청 시점 `window.location.origin` 또는 `VERCEL_URL` 사용) |
+| 기존 Supabase 키 | 변경 없음 (`NEXT_PUBLIC_SUPABASE_URL`, publishable/anon key) |
+
+### Authentication → Email Templates → Reset Password
+
+기본 템플릿이 PKCE/`{{ .ConfirmationURL }}` 이면 그대로 사용합니다.  
+직접 링크를 만들 경우 **반드시 허용된 Redirect URL로만** 돌아오게 하며, 예:
+
+`{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/login/update-password`
+
+(실제 토큰 형식은 Supabase 프로젝트 Auth 설정에 맞춥니다.)
+
+**비밀번호 최소 길이**는 **Authentication → Providers → Email** (기본 6자)와 앱의 검증을 맞춥니다.
+
+**아이디 찾기:** 로그인 ID는 이메일뿐이며 별도 본인 확인 수단이 없어 `/login/find-id`는 안내만 표시합니다.
+
+---
+
+## 6. 배포 (Vercel 등)
+
+프로덕션에 동일 Supabase env 설정 후 로그인·RLS·link 결과를 한 번 더 확인합니다.  
+비밀번호 재설정 메일·링크·변경·재로그인을 프로덕션 Site URL 기준으로 한 번 테스트합니다.

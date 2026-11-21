@@ -28,15 +28,18 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isLogin = path.startsWith("/login");
+  const isAuthRoute = path.startsWith("/auth");
   const isApi = path.startsWith("/api");
+  const isPasswordRecovery =
+    path === "/login/update-password" || path === "/login/recovery-redirect";
 
-  if (!user && !isLogin && !isApi) {
+  if (!user && !isLogin && !isApi && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isLogin) {
+  if (user && isLogin && !isPasswordRecovery) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

@@ -24,7 +24,9 @@ export type ExpenseRow = {
   sms_confirmed_year?: number | null;
   sms_semantic_key?: string | null;
   payment_time?: string | null;
+  card_id?: string | null;
+  installment_months?: number | null;
 };
 
 export const EXPENSE_SELECT =
-  "id, created_at, date, amount, description, user_id, note, category_code, category_needs_review, category_user_set, sort_order, sms_fingerprint, sms_confirmed_year, sms_semantic_key, payment_time";
+  "id, created_at, date, amount, description, user_id, note, category_code, category_needs_review, category_user_set, sort_order, sms_fingerprint, sms_confirmed_year, sms_semantic_key, payment_time, card_id, installment_months";

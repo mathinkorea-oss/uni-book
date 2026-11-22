@@ -44,7 +44,7 @@ export function preprocessSmsLines(raw: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-function stripBalanceSegments(text: string): string {
+export function stripBalanceSegments(text: string): string {
   return text.replace(/잔액\s*[\d,]+\s*원?/gi, " ").replace(/[ \t]+/g, " ").trim();
 }
 

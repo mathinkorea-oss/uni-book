@@ -12,13 +12,24 @@ describe("SMS dedup by confirmed year (not expense date)", () => {
       sms_confirmed_year: 2026,
       date: "2025-11-01",
     };
+    const cardA = "00000000-0000-4000-8000-0000000000aa";
     assert.equal(
-      isSameSmsRegistration(stored, fingerprint, 2026),
+      isSameSmsRegistration(
+        { ...stored, card_id: cardA },
+        fingerprint,
+        2026,
+        cardA,
+      ),
       true,
       "same SMS + confirmed 2026 must match even if stored date is 2025",
     );
     assert.equal(
-      isSameSmsRegistration(stored, fingerprint, 2025),
+      isSameSmsRegistration(
+        { ...stored, card_id: cardA },
+        fingerprint,
+        2025,
+        cardA,
+      ),
       false,
       "different confirmed year is a separate registration",
     );
@@ -29,7 +40,23 @@ describe("SMS dedup by confirmed year (not expense date)", () => {
       sms_fingerprint: fingerprint,
       sms_confirmed_year: 2026,
     };
-    assert.equal(isSameSmsRegistration(stored2026, fingerprint, 2025), false);
+    const cardB = "00000000-0000-4000-8000-0000000000bb";
+    assert.equal(
+      isSameSmsRegistration(
+        { ...stored2026, card_id: cardB },
+        fingerprint,
+        2025,
+        cardB,
+      ),
+      false,
+    );
+  });
+
+  it("same SMS on different cards is not the same registration", () => {
+    const card1 = "00000000-0000-4000-8000-000000000011";
+    const card2 = "00000000-0000-4000-8000-000000000012";
+    const stored = { sms_fingerprint: fingerprint, sms_confirmed_year: 2026, card_id: card1 };
+    assert.equal(isSameSmsRegistration(stored, fingerprint, 2026, card2), false);
   });
 
   it("parseConfirmedYear rejects invalid values", () => {

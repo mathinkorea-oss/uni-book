@@ -15,9 +15,11 @@ export type DuplicateExpenseSummary = {
   payment_time?: string | null;
   note?: string | null;
   sms_confirmed_year?: number | null;
+  card_id?: string | null;
 };
 
 export function buildSemanticInput(params: {
+  cardId: string;
   confirmedYear: number;
   date: string;
   paymentTime: string;
@@ -25,6 +27,7 @@ export function buildSemanticInput(params: {
   merchant: string;
 }): SmsSemanticInput {
   return {
+    cardId: params.cardId,
     confirmedYear: params.confirmedYear,
     date: params.date,
     paymentTime: params.paymentTime,
@@ -37,28 +40,33 @@ export function isSameSmsRegistration(
   stored: {
     sms_fingerprint?: string | null;
     sms_confirmed_year?: number | null;
+    card_id?: string | null;
   },
   fingerprint: string,
   confirmedYear: number,
+  cardId: string,
 ): boolean {
   return (
     stored.sms_fingerprint === fingerprint &&
-    stored.sms_confirmed_year === confirmedYear
+    stored.sms_confirmed_year === confirmedYear &&
+    stored.card_id === cardId
   );
 }
 
 export async function findExactSmsDuplicate(
   supabase: SupabaseClient,
   userId: string,
+  cardId: string,
   fingerprint: string,
   confirmedYear: number,
 ): Promise<DuplicateExpenseSummary | null> {
   const { data } = await supabase
     .from("expenses")
     .select(
-      "id, date, amount, description, payment_time, note, sms_confirmed_year",
+      "id, date, amount, description, payment_time, note, sms_confirmed_year, card_id",
     )
     .eq("user_id", userId)
+    .eq("card_id", cardId)
     .eq("sms_fingerprint", fingerprint)
     .eq("sms_confirmed_year", confirmedYear)
     .maybeSingle();
@@ -76,9 +84,10 @@ export async function findSemanticSmsDuplicate(
   const { data: byKey } = await supabase
     .from("expenses")
     .select(
-      "id, date, amount, description, payment_time, note, sms_confirmed_year",
+      "id, date, amount, description, payment_time, note, sms_confirmed_year, card_id",
     )
     .eq("user_id", userId)
+    .eq("card_id", input.cardId)
     .eq("sms_confirmed_year", input.confirmedYear)
     .eq("sms_semantic_key", semanticKey)
     .maybeSingle();
@@ -88,9 +97,10 @@ export async function findSemanticSmsDuplicate(
   const { data: rows } = await supabase
     .from("expenses")
     .select(
-      "id, date, amount, description, payment_time, note, sms_confirmed_year, sms_semantic_key",
+      "id, date, amount, description, payment_time, note, sms_confirmed_year, sms_semantic_key, card_id",
     )
     .eq("user_id", userId)
+    .eq("card_id", input.cardId)
     .eq("sms_confirmed_year", input.confirmedYear)
     .eq("date", input.date)
     .eq("amount", Math.round(input.amount));
@@ -107,6 +117,7 @@ export async function findSemanticSmsDuplicate(
 export async function findDeletedSmsMarker(
   supabase: SupabaseClient,
   userId: string,
+  cardId: string,
   fingerprint: string,
   confirmedYear: number,
 ): Promise<boolean> {
@@ -114,6 +125,7 @@ export async function findDeletedSmsMarker(
     .from("expense_sms_deleted_markers")
     .select("user_id")
     .eq("user_id", userId)
+    .eq("card_id", cardId)
     .eq("sms_fingerprint", fingerprint)
     .eq("sms_confirmed_year", confirmedYear)
     .maybeSingle();
@@ -123,6 +135,7 @@ export async function findDeletedSmsMarker(
 export async function findFuzzyDuplicateCandidates(
   supabase: SupabaseClient,
   userId: string,
+  cardId: string,
   date: string,
   amount: number,
   merchant: string,
@@ -132,9 +145,10 @@ export async function findFuzzyDuplicateCandidates(
   const { data } = await supabase
     .from("expenses")
     .select(
-      "id, date, amount, description, payment_time, note, sms_fingerprint, sms_confirmed_year",
+      "id, date, amount, description, payment_time, note, sms_fingerprint, sms_confirmed_year, card_id",
     )
     .eq("user_id", userId)
+    .eq("card_id", cardId)
     .eq("date", date)
     .eq("amount", amount);
 
@@ -158,6 +172,7 @@ export async function findFuzzyDuplicateCandidates(
 export async function clearSmsDeletedMarker(
   supabase: SupabaseClient,
   userId: string,
+  cardId: string,
   fingerprint: string,
   confirmedYear: number,
 ): Promise<void> {
@@ -165,6 +180,7 @@ export async function clearSmsDeletedMarker(
     .from("expense_sms_deleted_markers")
     .delete()
     .eq("user_id", userId)
+    .eq("card_id", cardId)
     .eq("sms_fingerprint", fingerprint)
     .eq("sms_confirmed_year", confirmedYear);
 }
@@ -172,6 +188,7 @@ export async function clearSmsDeletedMarker(
 export async function resolveSmsDuplicateExpense(
   supabase: SupabaseClient,
   userId: string,
+  cardId: string,
   fingerprint: string,
   confirmedYear: number,
   semanticInput: SmsSemanticInput,
@@ -179,6 +196,7 @@ export async function resolveSmsDuplicateExpense(
   const byFp = await findExactSmsDuplicate(
     supabase,
     userId,
+    cardId,
     fingerprint,
     confirmedYear,
   );

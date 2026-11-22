@@ -49,6 +49,12 @@ import {
   viewMonthFromExpenseDate,
   type ViewMonth,
 } from "@/lib/month";
+import { CardFilterChips } from "@/components/card-filter-chips";
+import {
+  type CardFilter,
+  getCardLabel,
+  type UserCardRow,
+} from "@/lib/cards";
 import { EXPENSE_SELECT, type ExpenseRow, supabase } from "@/lib/supabase/client";
 import {
   readUiPref,
@@ -62,6 +68,9 @@ const EXPENSE_LIST_ID = "expense-usage-list";
 export type UsageSectionHandle = {
   reload: () => Promise<void>;
   getSortMode: () => SortMode;
+  getCardFilter: () => CardFilter;
+  getCardIdForSave: () => string | null;
+  getCards: () => UserCardRow[];
 };
 
 type Props = {
@@ -130,6 +139,8 @@ function SortableRow({
   entry,
   manualMode,
   filterActive,
+  cardLabel,
+  installmentMonths,
   onEdit,
   onDelete,
   deleteConfirmOpen,
@@ -141,6 +152,8 @@ function SortableRow({
   entry: ExpenseRow;
   manualMode: boolean;
   filterActive: boolean;
+  cardLabel: string;
+  installmentMonths: number | null;
   onEdit: () => void;
   onDelete: () => void;
   deleteConfirmOpen: boolean;
@@ -199,6 +212,14 @@ function SortableRow({
             <p className="text-xs text-brand-muted sm:text-sm">
               {formatDateWithWeekday(entry.date)}
             </p>
+            {cardLabel ? (
+              <span className="text-xs text-brand-muted">{cardLabel}</span>
+            ) : null}
+            {installmentMonths ? (
+              <span className="text-xs text-brand-muted">
+                할부 {installmentMonths}개월
+              </span>
+            ) : null}
           </div>
           {note ? (
             <p className="mt-0.5 text-xs text-brand-muted sm:text-sm">{note}</p>
@@ -264,6 +285,9 @@ export function ExpenseUsageSection({
   const [categoryFilter, setCategoryFilter] = useState<CategoryCode | "all">(
     "all",
   );
+  const [cardFilter, setCardFilter] = useState<CardFilter>("all");
+  const [cards, setCards] = useState<UserCardRow[]>([]);
+  const [manualSaveCardId, setManualSaveCardId] = useState<string>("");
   const [listExpanded, setListExpanded] = useState(false);
   const [editEntry, setEditEntry] = useState<ExpenseRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ExpenseRow | null>(null);
@@ -334,6 +358,21 @@ export function ExpenseUsageSection({
   }, []);
 
   useEffect(() => {
+    void fetch("/api/cards")
+      .then((r) => r.json())
+      .then((data: { cards?: UserCardRow[] }) => {
+        const list = data.cards ?? [];
+        setCards(list);
+        if (list.length && !manualSaveCardId) {
+          setManualSaveCardId(list[0].id);
+        }
+      })
+      .catch(() => {
+        /* cards API unavailable before migration */
+      });
+  }, [manualSaveCardId]);
+
+  useEffect(() => {
     if (viewMonth) void loadEntriesForMonth(viewMonth);
   }, [viewMonth, loadEntriesForMonth]);
 
@@ -341,12 +380,27 @@ export function ExpenseUsageSection({
     onReady({
       reload,
       getSortMode: () => sortMode,
+      getCardFilter: () => cardFilter,
+      getCardIdForSave: () => {
+        if (cardFilter !== "all") {
+          return cards.find((c) => c.code === cardFilter)?.id ?? null;
+        }
+        return manualSaveCardId || cards[0]?.id || null;
+      },
+      getCards: () => cards,
     });
-  }, [onReady, reload, sortMode]);
+  }, [onReady, reload, sortMode, cardFilter, cards, manualSaveCardId]);
+
+  const cardFiltered = useMemo(() => {
+    if (cardFilter === "all") return entries;
+    const card = cards.find((c) => c.code === cardFilter);
+    if (!card) return entries;
+    return entries.filter((e) => e.card_id === card.id);
+  }, [entries, cardFilter, cards]);
 
   const sorted = useMemo(
-    () => sortExpenses(entries, sortMode),
-    [entries, sortMode],
+    () => sortExpenses(cardFiltered, sortMode),
+    [cardFiltered, sortMode],
   );
 
   const filtered = useMemo(() => {
@@ -356,10 +410,13 @@ export function ExpenseUsageSection({
     );
   }, [sorted, categoryFilter]);
 
-  const monthTotal = entries.reduce((s, e) => s + e.amount, 0);
+  const listFilterActive =
+    categoryFilter !== "all" || cardFilter !== "all";
+
+  const monthTotal = cardFiltered.reduce((s, e) => s + e.amount, 0);
   const filteredTotal = filtered.reduce((s, e) => s + e.amount, 0);
 
-  const weekdaySource = categoryFilter === "all" ? entries : filtered;
+  const weekdaySource = categoryFilter === "all" ? cardFiltered : filtered;
   const weekdaySums = useMemo(
     () => sumByWeekdayInMonth(weekdaySource),
     [weekdaySource],
@@ -461,7 +518,7 @@ export function ExpenseUsageSection({
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    if (categoryFilter !== "all" || sortMode !== "manual") return;
+    if (listFilterActive || sortMode !== "manual") return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = sorted.findIndex((e) => e.id === active.id);
@@ -471,7 +528,7 @@ export function ExpenseUsageSection({
   }
 
   function moveRow(id: string, dir: -1 | 1) {
-    if (categoryFilter !== "all") return;
+    if (listFilterActive) return;
     const idx = sorted.findIndex((e) => e.id === id);
     const target = idx + dir;
     if (idx < 0 || target < 0 || target >= sorted.length) return;
@@ -581,6 +638,35 @@ export function ExpenseUsageSection({
         </button>
       </div>
 
+      {cards.length > 0 ? (
+        <CardFilterChips
+          cards={cards}
+          value={cardFilter}
+          onChange={(next) => {
+            setCardFilter(next);
+            setListExpanded(false);
+          }}
+        />
+      ) : null}
+
+      {cardFilter === "all" && cards.length > 1 ? (
+        <label className="mb-2 flex flex-col gap-1 text-sm text-brand-muted">
+          기록·입력 시 사용할 카드
+          <select
+            value={manualSaveCardId}
+            onChange={(e) => setManualSaveCardId(e.target.value)}
+            className="h-11 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
+            aria-label="저장할 카드 선택"
+          >
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.display_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       <div className="mb-2 flex gap-2">
         <button
           type="button"
@@ -627,9 +713,9 @@ export function ExpenseUsageSection({
         </select>
       </label>
 
-      {categoryFilter !== "all" && sortMode === "manual" && (
+      {listFilterActive && sortMode === "manual" && (
         <p className="mb-2 text-sm text-brand-muted">
-          전체 항목에서 순서를 변경할 수 있습니다.
+          전체 카드·전체 항목에서만 순서를 변경할 수 있습니다.
         </p>
       )}
 
@@ -637,7 +723,7 @@ export function ExpenseUsageSection({
         <ExpenseSummaryCard
           viewMonth={viewMonth}
           monthTotal={monthTotal}
-          entryCount={entries.length}
+          entryCount={cardFiltered.length}
           categoryFilter={categoryFilter}
           filteredTotal={filteredTotal}
           filteredCount={filtered.length}
@@ -727,7 +813,9 @@ export function ExpenseUsageSection({
                   key={entry.id}
                   entry={entry}
                   manualMode={sortMode === "manual"}
-                  filterActive={categoryFilter !== "all"}
+                  filterActive={listFilterActive}
+                  cardLabel={getCardLabel(cards, entry.card_id)}
+                  installmentMonths={entry.installment_months ?? null}
                   onEdit={() => {
                     setDeleteError(null);
                     setEditEntry(entry);
@@ -779,6 +867,7 @@ export function ExpenseUsageSection({
 
       <ExpenseEditSheet
         entry={editEntry}
+        cards={cards}
         open={Boolean(editEntry)}
         onClose={() => setEditEntry(null)}
         onSaved={(expense, previousDate) => {

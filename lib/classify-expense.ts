@@ -25,8 +25,24 @@ export function classifyByRules(
   if (/개인용|사적|본인용/.test(text) && !/접대|거래처/.test(text)) {
     return { code: "personal_items", needsReview: false, source: "rule" };
   }
-  if (/접대|거래처|회식|접견/.test(text)) {
+  if (/선물|기프트|gift/.test(text)) {
+    return { code: "gift", needsReview: false, source: "rule" };
+  }
+  if (/회식/.test(text)) {
+    return { code: "gathering", needsReview: false, source: "rule" };
+  }
+  if (/접대|거래처|접견/.test(text)) {
     return { code: "entertainment", needsReview: false, source: "rule" };
+  }
+  if (
+    /치과|병원|의원|한의원|피부과|성형|교정|플랜트|내과|외과|소아과|정형외과|이비인후|안과|산부인과|응급실|건강검진|종합검진|메디|메디컬|medical|hospital|clinic|dental/.test(
+      text,
+    )
+  ) {
+    return { code: "hospital", needsReview: false, source: "rule" };
+  }
+  if (/약국|드럭|pharmacy|굿모닝|올리브영약/.test(text)) {
+    return { code: "pharmacy", needsReview: false, source: "rule" };
   }
   if (/학생\s*간식|간식|햄버거|피자|도시락/.test(text) && /학생/.test(text)) {
     return { code: "student_snack", needsReview: false, source: "rule" };

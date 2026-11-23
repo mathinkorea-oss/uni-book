@@ -10,7 +10,11 @@ export type CategoryCode =
   | "transport"
   | "golf"
   | "travel"
+  | "hospital"
+  | "pharmacy"
   | "entertainment"
+  | "gathering"
+  | "gift"
   | "personal_items"
   | "other";
 
@@ -20,6 +24,7 @@ export type CategoryGroupId =
   | "operations"
   | "digital"
   | "travel_leisure"
+  | "health"
   | "personal"
   | "other";
 
@@ -54,9 +59,14 @@ export const CATEGORY_GROUPS: {
     codes: ["transport", "golf", "travel"],
   },
   {
+    id: "health",
+    label: "의료",
+    codes: ["hospital", "pharmacy"],
+  },
+  {
     id: "personal",
     label: "개인·접대",
-    codes: ["entertainment", "personal_items"],
+    codes: ["entertainment", "gathering", "gift", "personal_items"],
   },
   { id: "other", label: "기타", codes: ["other"] },
 ];
@@ -73,7 +83,11 @@ export const CATEGORY_LABELS: Record<CategoryCode, string> = {
   transport: "교통·차량",
   golf: "골프",
   travel: "여행",
+  hospital: "병원",
+  pharmacy: "약국",
   entertainment: "접대",
+  gathering: "회식",
+  gift: "선물",
   personal_items: "개인물품",
   other: "기타",
 };
@@ -113,7 +127,8 @@ export function mapLegacyCategoryName(
 ): CategoryCode {
   if (legacy === "개인_접대" || legacy === "개인/접대") {
     const ctx = `${description} ${note}`.toLowerCase();
-    if (/접대|거래처|회식|접견/.test(ctx)) return "entertainment";
+    if (/회식/.test(ctx)) return "gathering";
+    if (/접대|거래처|접견/.test(ctx)) return "entertainment";
     if (/개인|사적|본인/.test(ctx)) return "personal_items";
     return "other";
   }

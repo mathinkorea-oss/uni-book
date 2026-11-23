@@ -33,6 +33,27 @@ export async function assertUserOwnsCard(
   return { ok: true, card: data as UserCardRow };
 }
 
+function matchCardsFromParse(
+  cards: UserCardRow[],
+  detectedCode: CardCode | null,
+  detectedDigits: string | null,
+): UserCardRow[] {
+  let matched = cards;
+
+  if (detectedDigits) {
+    matched = matched.filter((c) => c.sms_last_digits === detectedDigits);
+  }
+  if (detectedCode) {
+    matched = matched.filter((c) => c.code === detectedCode);
+  }
+
+  if (!detectedCode && detectedDigits) {
+    matched = matched.filter((c) => c.issuer === "kb");
+  }
+
+  return matched;
+}
+
 export function resolveCardIdFromParse(params: {
   cards: UserCardRow[];
   detectedCode: CardCode | null;
@@ -44,14 +65,8 @@ export function resolveCardIdFromParse(params: {
   needsSelection: boolean;
 } {
   const { cards, detectedCode, detectedDigits, selectedCardId } = params;
-
-  let inferred: UserCardRow | undefined;
-  if (detectedCode) {
-    inferred = cards.find((c) => c.code === detectedCode);
-  }
-  if (!inferred && detectedDigits) {
-    inferred = cards.find((c) => c.sms_last_digits === detectedDigits);
-  }
+  const matched = matchCardsFromParse(cards, detectedCode, detectedDigits);
+  const inferred = matched.length === 1 ? matched[0] : undefined;
 
   if (selectedCardId) {
     const selected = cards.find((c) => c.id === selectedCardId);
@@ -66,6 +81,10 @@ export function resolveCardIdFromParse(params: {
 
   if (inferred) {
     return { cardId: inferred.id, mismatch: false, needsSelection: false };
+  }
+
+  if (matched.length > 1) {
+    return { cardId: null, mismatch: false, needsSelection: true };
   }
 
   return { cardId: null, mismatch: false, needsSelection: true };

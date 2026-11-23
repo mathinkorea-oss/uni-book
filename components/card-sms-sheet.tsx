@@ -91,7 +91,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
       .then((data: { cards?: UserCardRow[] }) => {
         const list = data.cards ?? [];
         setCards(list);
-        if (list.length) setSelectedCardId(list[0].id);
+        setSelectedCardId("");
       })
       .catch(() => {});
     setStep("paste");
@@ -129,7 +129,11 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
       const res = await fetch("/api/expenses/sms/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText, year, cardId: selectedCardId || undefined }),
+        body: JSON.stringify({
+          rawText,
+          year,
+          cardId: selectedCardId ? selectedCardId : undefined,
+        }),
       });
       const data = await res.json();
       if (data.parseError) {
@@ -138,6 +142,9 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
       }
       if (data.needsCardSelection) {
         setCards(data.cards ?? []);
+        if (!selectedCardId && data.cards?.length) {
+          setSelectedCardId("");
+        }
         setStep("pickCard");
         return;
       }
@@ -323,6 +330,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                 className="h-12 w-full rounded-[12px] border border-brand-border px-3 text-base"
                 aria-label="저장할 카드"
               >
+                <option value="">카드를 선택하세요</option>
                 {cards.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.display_name}
@@ -331,7 +339,8 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
               </select>
               <button
                 type="button"
-                className="h-12 w-full rounded-[12px] bg-brand-green text-base font-medium text-white"
+                disabled={!selectedCardId || analyzing}
+                className="h-12 w-full rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-60"
                 onClick={() => void handleAnalyze()}
               >
                 다시 분석
@@ -549,7 +558,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                 </p>
               )}
 
-              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row">
+              <div className="sticky bottom-0 mt-4 flex shrink-0 flex-col-reverse gap-2 border-t border-brand-border bg-brand-surface pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:flex-row">
                 <button
                   type="button"
                   disabled={saving}

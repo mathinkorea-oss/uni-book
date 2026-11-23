@@ -7,6 +7,7 @@ export function uiPrefStorageKey(userId: string, key: string) {
 export const UI_PREF_KEYS = {
   weekdayExpanded: "weekdayExpanded",
   usageListVisible: "usageListVisible",
+  lastSaveCardId: "lastSaveCardId",
 } as const;
 
 export function readUiPref(
@@ -33,6 +34,32 @@ export function writeUiPref(
   if (!userId || typeof window === "undefined") return;
   try {
     localStorage.setItem(uiPrefStorageKey(userId, key), String(value));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function readUiPrefString(
+  userId: string | null,
+  key: string,
+): string | null {
+  if (!userId || typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(uiPrefStorageKey(userId, key));
+    return raw && raw.length > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeUiPrefString(
+  userId: string | null,
+  key: string,
+  value: string,
+): void {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(uiPrefStorageKey(userId, key), value);
   } catch {
     /* storage unavailable */
   }

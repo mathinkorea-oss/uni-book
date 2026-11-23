@@ -8,6 +8,7 @@ import {
 } from "@/lib/categories";
 import { formatDateWithWeekday } from "@/lib/expense-date";
 import { buildExpenseDateIso } from "@/lib/parse-shinhan-sms";
+import type { UserCardRow } from "@/lib/cards";
 import type { ExpenseRow } from "@/lib/supabase/client";
 
 type DuplicateRow = {
@@ -20,6 +21,10 @@ type DuplicateRow = {
 
 type AnalyzeResult = {
   fingerprint: string;
+  cardId?: string;
+  cardMismatch?: boolean;
+  cards?: UserCardRow[];
+  installmentMonths?: number | null;
   suggestedYear: number;
   date: string;
   dateLabel: string;
@@ -53,7 +58,14 @@ function koreaYearNow() {
 
 export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
   const [rawText, setRawText] = useState("");
-  const [step, setStep] = useState<"paste" | "preview" | "notice">("paste");
+  const [step, setStep] = useState<"paste" | "pickCard" | "preview" | "notice">(
+    "paste",
+  );
+  const [cards, setCards] = useState<UserCardRow[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState("");
+  const [installmentMonths, setInstallmentMonths] = useState<number | null>(null);
+  const [cardMismatch, setCardMismatch] = useState(false);
+  const [confirmCardMismatch, setConfirmCardMismatch] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeExpense, setNoticeExpense] = useState<DuplicateRow | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
@@ -74,6 +86,14 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    void fetch("/api/cards")
+      .then((r) => r.json())
+      .then((data: { cards?: UserCardRow[] }) => {
+        const list = data.cards ?? [];
+        setCards(list);
+        if (list.length) setSelectedCardId(list[0].id);
+      })
+      .catch(() => {});
     setStep("paste");
     setRawText("");
     setAnalysis(null);
@@ -109,11 +129,16 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
       const res = await fetch("/api/expenses/sms/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText, year }),
+        body: JSON.stringify({ rawText, year, cardId: selectedCardId || undefined }),
       });
       const data = await res.json();
       if (data.parseError) {
         setError(data.parseError.message);
+        return;
+      }
+      if (data.needsCardSelection) {
+        setCards(data.cards ?? []);
+        setStep("pickCard");
         return;
       }
       if (!res.ok) {
@@ -132,6 +157,11 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
         return;
       }
       setAnalysis(result);
+      if (result.cards?.length) setCards(result.cards);
+      if (result.cardId) setSelectedCardId(result.cardId);
+      setCardMismatch(Boolean(result.cardMismatch));
+      setConfirmCardMismatch(false);
+      setInstallmentMonths(result.installmentMonths ?? null);
       setDate(result.date);
       setTime(result.time);
       setAmount(String(result.amount));
@@ -159,6 +189,8 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
         body: JSON.stringify({
           rawText,
           fingerprint: analysis.fingerprint,
+          cardId: selectedCardId,
+          installmentMonths,
           confirmedYear: year,
           date,
           amount: Number(amount.replace(/[^\d]/g, "")),
@@ -168,6 +200,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
           category_user_set: categoryUserSet,
           payment_time: time,
           sortMode: getSortMode(),
+          confirmCardMismatch: confirmCardMismatch || undefined,
           ...extra,
         }),
       });
@@ -250,7 +283,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                   onChange={(e) => setRawText(e.target.value)}
                   rows={8}
                   className="min-h-[10rem] resize-y rounded-[12px] border border-brand-border px-3.5 py-3 text-base leading-normal text-brand-ink placeholder:text-[#737B75] outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20"
-                  placeholder="복사한 신한 법인카드 승인 문자를 붙여넣으세요"
+                  placeholder="신한 법인카드 또는 KB국민카드 승인 문자를 붙여넣으세요"
                 />
               </label>
               {error && (
@@ -276,6 +309,34 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                 </button>
               </div>
             </>
+          )}
+
+          {step === "pickCard" && (
+            <div className="space-y-3">
+              <p className="text-sm text-brand-ink">
+                문자에서 카드를 자동으로 특정하지 못했습니다. 저장할 카드를
+                선택해 주세요.
+              </p>
+              <select
+                value={selectedCardId}
+                onChange={(e) => setSelectedCardId(e.target.value)}
+                className="h-12 w-full rounded-[12px] border border-brand-border px-3 text-base"
+                aria-label="저장할 카드"
+              >
+                {cards.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.display_name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="h-12 w-full rounded-[12px] bg-brand-green text-base font-medium text-white"
+                onClick={() => void handleAnalyze()}
+              >
+                다시 분석
+              </button>
+            </div>
           )}
 
           {step === "notice" && (
@@ -317,6 +378,36 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
               </p>
 
               <div className="space-y-3">
+                <label className="flex flex-col gap-1 text-sm text-brand-muted">
+                  저장할 카드
+                  <select
+                    value={selectedCardId}
+                    onChange={(e) => {
+                      setSelectedCardId(e.target.value);
+                      setConfirmCardMismatch(false);
+                    }}
+                    className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
+                    aria-label="저장할 카드"
+                  >
+                    {cards.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {cardMismatch && !confirmCardMismatch ? (
+                  <p className="rounded-[10px] border border-brand-border bg-brand-yellow/40 px-3 py-2 text-sm text-brand-ink">
+                    문자로 인식한 카드와 선택한 카드가 다릅니다. 맞다면 저장 시
+                    다시 확인합니다.
+                  </p>
+                ) : null}
+                {installmentMonths ? (
+                  <p className="text-sm text-brand-muted">
+                    할부 {installmentMonths}개월 (승인 금액 전액을 결제일 지출로
+                    기록합니다)
+                  </p>
+                ) : null}
                 <label className="flex flex-col gap-1 text-sm text-brand-muted">
                   결제 연도
                   <input

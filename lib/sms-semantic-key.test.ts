@@ -17,12 +17,15 @@ const MULTI_LINE = `[Web발신]
 10,000원 김치찌개 미화식당 칠괴점
 잔액4,235,157원`;
 
+const TEST_CARD_ID = "00000000-0000-4000-8000-000000000001";
+
 function semanticFromRaw(raw: string, year = 2026) {
   const p = parseShinhanCorporateSms(raw);
   assert.equal(p.ok, true);
   if (!p.ok) throw new Error("parse failed");
   const date = `${year}-${String(p.data.month).padStart(2, "0")}-${String(p.data.day).padStart(2, "0")}`;
   return buildSmsSemanticKey({
+    cardId: TEST_CARD_ID,
     confirmedYear: year,
     date,
     paymentTime: p.data.time,
@@ -43,6 +46,7 @@ describe("sms semantic key", () => {
   it("different merchant yields different semantic key", () => {
     const a = semanticFromRaw(ONE_LINE);
     const b = buildSmsSemanticKey({
+      cardId: TEST_CARD_ID,
       confirmedYear: 2026,
       date: "2026-10-29",
       paymentTime: "14:13",
@@ -54,6 +58,7 @@ describe("sms semantic key", () => {
 
   it("isExactSemanticPaymentMatch ignores fingerprint", () => {
     const input = {
+      cardId: TEST_CARD_ID,
       confirmedYear: 2026,
       date: "2026-10-29",
       paymentTime: "14:13",
@@ -77,6 +82,7 @@ describe("sms semantic key", () => {
 
   it("fuzzy excludes exact semantic match", () => {
     const input = {
+      cardId: TEST_CARD_ID,
       confirmedYear: 2026,
       date: "2026-10-29",
       paymentTime: "14:13",

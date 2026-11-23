@@ -7,22 +7,25 @@ import {
   getCategoryLabel,
   isCategoryCode,
 } from "@/lib/categories";
+import type { UserCardRow } from "@/lib/cards";
 import type { ExpenseRow } from "@/lib/supabase/client";
 import { expenseTextParts } from "@/lib/expense-parse";
 
 type Props = {
   entry: ExpenseRow | null;
+  cards: UserCardRow[];
   open: boolean;
   onClose: () => void;
   onSaved: (expense: ExpenseRow, previousDate: string) => void;
 };
 
-export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
+export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props) {
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [note, setNote] = useState("");
   const [category, setCategory] = useState<CategoryCode>("other");
+  const [cardId, setCardId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,8 +41,9 @@ export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
         ? (entry.category_code as CategoryCode)
         : "other",
     );
+    setCardId(entry.card_id ?? cards[0]?.id ?? "");
     setError(null);
-  }, [entry]);
+  }, [entry, cards]);
 
   if (!open || !entry) return null;
 
@@ -59,6 +63,7 @@ export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
           note,
           category_code: category,
           category_user_set: true,
+          card_id: cardId,
         }),
       });
       const data = (await res.json()) as {
@@ -96,6 +101,28 @@ export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
           사용내역 수정
         </h3>
         <div className="mt-4 flex flex-col gap-3">
+          {cards.length > 0 ? (
+            <label className="flex flex-col gap-1 text-sm text-brand-muted">
+              카드
+              <select
+                value={cardId}
+                onChange={(e) => setCardId(e.target.value)}
+                className="h-11 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
+                aria-label="카드 선택"
+              >
+                {cards.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.display_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {entry.installment_months ? (
+            <p className="text-sm text-brand-muted">
+              할부 {entry.installment_months}개월 (문자 등록 정보)
+            </p>
+          ) : null}
           <label className="flex flex-col gap-1 text-sm text-brand-muted">
             날짜
             <input
@@ -108,9 +135,9 @@ export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
           <label className="flex flex-col gap-1 text-sm text-brand-muted">
             금액
             <input
-              inputMode="numeric"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              inputMode="numeric"
               className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
             />
           </label>
@@ -123,48 +150,48 @@ export function ExpenseEditSheet({ entry, open, onClose, onSaved }: Props) {
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-brand-muted">
-            참고
-            <textarea
+            메모
+            <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              className="rounded-[10px] border border-brand-border px-3 py-2 text-base text-brand-ink"
+              className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-brand-muted">
-            사용 항목
+            분류
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as CategoryCode)}
               className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
             >
-              {CATEGORY_GROUPS.map((group) => (
-                <optgroup key={group.id} label={group.label}>
-                  {group.codes.map((code) => (
-                    <option key={code} value={code}>
-                      {getCategoryLabel(code)}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              {CATEGORY_GROUPS.flatMap((g) =>
+                g.codes.map((c) => (
+                  <option key={c} value={c}>
+                    {getCategoryLabel(c)}
+                  </option>
+                )),
+              )}
             </select>
           </label>
-          {error && <p className="text-sm text-[#b3261e]">{error}</p>}
         </div>
+        {error ? (
+          <p className="mt-3 text-sm text-[#b3261e]" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="mt-5 flex gap-2">
           <button
             type="button"
             onClick={onClose}
-            disabled={saving}
-            className="h-11 flex-1 rounded-[10px] border border-brand-border text-base text-brand-ink"
+            className="h-12 flex-1 rounded-[12px] border border-brand-border text-base"
           >
             취소
           </button>
           <button
             type="button"
-            onClick={() => void handleSave()}
             disabled={saving}
-            className="h-11 flex-1 rounded-[10px] bg-brand-green text-base font-medium text-white disabled:opacity-60"
+            onClick={() => void handleSave()}
+            className="h-12 flex-1 rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-70"
           >
             {saving ? "저장 중…" : "저장"}
           </button>

@@ -12,17 +12,21 @@ export type ExpenseStatsRow = {
 
 export async function fetchAllExpensesForStats(
   supabase: SupabaseClient,
+  cardId?: string | null,
 ): Promise<{ rows: ExpenseStatsRow[]; error: string | null }> {
   const rows: ExpenseStatsRow[] = [];
   let from = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("expenses")
       .select("date, amount, description, note, category_code")
       .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(from, from + PAGE - 1);
+      .order("created_at", { ascending: false });
+    if (cardId) {
+      query = query.eq("card_id", cardId);
+    }
+    const { data, error } = await query.range(from, from + PAGE - 1);
 
     if (error) {
       return { rows: [], error: error.message };

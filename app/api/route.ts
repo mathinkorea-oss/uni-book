@@ -35,7 +35,11 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { messages?: ChatMessageInput[]; sortMode?: "date" | "manual" };
+  let body: {
+    messages?: ChatMessageInput[];
+    sortMode?: "date" | "manual";
+    cardId?: string | null;
+  };
   try {
     body = await request.json();
   } catch {
@@ -65,8 +69,10 @@ export async function POST(request: Request) {
 
   if (intent === "stats") {
     try {
-      const { rows, error: allError } =
-        await fetchAllExpensesForStats(supabase);
+      const { rows, error: allError } = await fetchAllExpensesForStats(
+        supabase,
+        body.cardId ?? undefined,
+      );
       if (allError) {
         return NextResponse.json(
           { error: "지출 내역을 불러오지 못했습니다." },
@@ -175,10 +181,18 @@ export async function POST(request: Request) {
       sortOrder = minOrder - 1;
     }
 
+    if (!body.cardId) {
+      return NextResponse.json({
+        reply: "저장할 카드를 선택해 주세요. (월 선택 아래 카드 필터·저장 카드)",
+        extracted: null,
+      });
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from("expenses")
       .insert({
         user_id: user.id,
+        card_id: body.cardId,
         date: analysis.date,
         amount: analysis.amount,
         description: analysis.description.trim(),

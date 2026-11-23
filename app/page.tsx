@@ -67,6 +67,7 @@ export default function Home() {
     setSending(true);
 
     const sortMode = usageRef.current?.getSortMode() ?? "date";
+    const cardId = usageRef.current?.getCardIdForSave() ?? null;
 
     try {
       const res = await fetch("/api", {
@@ -78,6 +79,7 @@ export default function Home() {
             content: m.content,
           })),
           sortMode,
+          cardId,
         }),
       });
 

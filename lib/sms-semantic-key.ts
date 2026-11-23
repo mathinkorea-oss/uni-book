@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { merchantSimilarity } from "@/lib/parse-shinhan-sms";
 
 export type SmsSemanticInput = {
+  cardId: string;
   confirmedYear: number;
   date: string;
   paymentTime: string;
@@ -18,6 +19,7 @@ export function buildSmsSemanticKey(input: SmsSemanticInput): string {
   const merchantNorm = normalizeMerchantForSemantic(input.merchant);
   const time = input.paymentTime.trim();
   const canonical = [
+    input.cardId,
     input.confirmedYear,
     input.date,
     time,

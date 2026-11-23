@@ -13,6 +13,7 @@ import {
   resolveSmsDuplicateExpense,
 } from "@/lib/sms-dedup";
 import { buildSmsSemanticKey } from "@/lib/sms-semantic-key";
+import { assertUserOwnsCard, ensureUserCards } from "@/lib/user-cards-server";
 import { EXPENSE_SELECT } from "@/lib/supabase/client";
 import { isAuthError, requireUser } from "@/lib/supabase/route-auth";
 
@@ -26,12 +27,15 @@ type SaveBody = {
   category_user_set?: boolean;
   payment_time?: string;
   fingerprint?: string;
+  cardId?: string;
+  installmentMonths?: number | null;
   action?: "create" | "link";
   linkExpenseId?: string;
   confirmSeparate?: boolean;
   confirmReRegister?: boolean;
   confirmedYear?: number;
   sortMode?: "date" | "manual";
+  confirmCardMismatch?: boolean;
 };
 
 export async function POST(request: Request) {
@@ -49,6 +53,15 @@ export async function POST(request: Request) {
   const rawText = body.rawText?.trim();
   if (!rawText) {
     return NextResponse.json({ error: "문자 정보가 없습니다." }, { status: 400 });
+  }
+
+  if (!body.cardId) {
+    return NextResponse.json({ error: "저장할 카드를 선택해 주세요." }, { status: 400 });
+  }
+
+  const owned = await assertUserOwnsCard(supabase, user.id, body.cardId);
+  if (!owned.ok) {
+    return NextResponse.json({ error: owned.message }, { status: 403 });
   }
 
   const expectedFp = smsFingerprint(rawText);
@@ -88,9 +101,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const cardId = body.cardId;
   const paymentTime = body.payment_time?.trim() ?? "";
+  const installmentMonths =
+    typeof body.installmentMonths === "number" && body.installmentMonths >= 1
+      ? body.installmentMonths
+      : null;
 
   const semanticInput = buildSemanticInput({
+    cardId,
     confirmedYear,
     date,
     paymentTime,
@@ -102,6 +121,7 @@ export async function POST(request: Request) {
   const exact = await findExactSmsDuplicate(
     supabase,
     user.id,
+    cardId,
     fingerprint,
     confirmedYear,
   );
@@ -131,12 +151,17 @@ export async function POST(request: Request) {
   if (body.action === "link" && body.linkExpenseId) {
     const { data: existing, error: fetchErr } = await supabase
       .from("expenses")
-      .select("id, date, amount, description, sms_fingerprint")
+      .select("id, date, amount, description, sms_fingerprint, card_id")
       .eq("id", body.linkExpenseId)
       .maybeSingle();
 
     if (fetchErr || !existing) {
       return NextResponse.json({ error: "기존 기록을 찾을 수 없습니다." }, { status: 404 });
+    }
+    if (existing.card_id && existing.card_id !== cardId) {
+      return NextResponse.json({
+        error: "선택한 카드와 기존 기록의 카드가 다릅니다.",
+      }, { status: 400 });
     }
     if (existing.sms_fingerprint) {
       return NextResponse.json({
@@ -148,6 +173,7 @@ export async function POST(request: Request) {
     const dupByYear = await resolveSmsDuplicateExpense(
       supabase,
       user.id,
+      cardId,
       fingerprint,
       confirmedYear,
       semanticInput,
@@ -163,10 +189,12 @@ export async function POST(request: Request) {
     const { data: linked, error: linkErr } = await supabase
       .from("expenses")
       .update({
+        card_id: cardId,
         sms_fingerprint: fingerprint,
         sms_confirmed_year: confirmedYear,
         sms_semantic_key: semanticKey,
         payment_time: paymentTime || null,
+        installment_months: installmentMonths,
       })
       .eq("id", body.linkExpenseId)
       .select(EXPENSE_SELECT)
@@ -177,6 +205,7 @@ export async function POST(request: Request) {
         const dup = await resolveSmsDuplicateExpense(
           supabase,
           user.id,
+          cardId,
           fingerprint,
           confirmedYear,
           semanticInput,
@@ -193,6 +222,7 @@ export async function POST(request: Request) {
     await clearSmsDeletedMarker(
       supabase,
       user.id,
+      cardId,
       fingerprint,
       confirmedYear,
     );
@@ -218,6 +248,7 @@ export async function POST(request: Request) {
     const fuzzy = await findFuzzyDuplicateCandidates(
       supabase,
       user.id,
+      cardId,
       date,
       amount,
       description,
@@ -236,6 +267,7 @@ export async function POST(request: Request) {
     .from("expense_sms_deleted_markers")
     .select("user_id")
     .eq("user_id", user.id)
+    .eq("card_id", cardId)
     .eq("sms_fingerprint", fingerprint)
     .eq("sms_confirmed_year", confirmedYear)
     .maybeSingle();
@@ -263,6 +295,7 @@ export async function POST(request: Request) {
     const { data: monthRows } = await supabase
       .from("expenses")
       .select("sort_order")
+      .eq("card_id", cardId)
       .gte("date", `${monthPrefix}-01`)
       .lte("date", `${monthPrefix}-31`);
     const orders = (monthRows ?? [])
@@ -275,6 +308,7 @@ export async function POST(request: Request) {
     .from("expenses")
     .insert({
       user_id: user.id,
+      card_id: cardId,
       date,
       amount: Math.round(amount),
       description,
@@ -289,6 +323,7 @@ export async function POST(request: Request) {
       sms_confirmed_year: confirmedYear,
       sms_semantic_key: semanticKey,
       payment_time: paymentTime || null,
+      installment_months: installmentMonths,
     })
     .select(EXPENSE_SELECT)
     .single();
@@ -298,6 +333,7 @@ export async function POST(request: Request) {
       const dup = await resolveSmsDuplicateExpense(
         supabase,
         user.id,
+        cardId,
         fingerprint,
         confirmedYear,
         semanticInput,
@@ -314,6 +350,7 @@ export async function POST(request: Request) {
   await clearSmsDeletedMarker(
     supabase,
     user.id,
+    cardId,
     fingerprint,
     confirmedYear,
   );

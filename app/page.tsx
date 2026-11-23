@@ -68,6 +68,7 @@ export default function Home() {
 
     const sortMode = usageRef.current?.getSortMode() ?? "date";
     const cardId = usageRef.current?.getCardIdForSave() ?? null;
+    const statsQuery = usageRef.current?.getStatsQuery();
     if (cardId) usageRef.current?.persistSaveCardId(cardId);
 
     try {
@@ -81,6 +82,7 @@ export default function Home() {
           })),
           sortMode,
           cardId,
+          statsQuery,
         }),
       });
 

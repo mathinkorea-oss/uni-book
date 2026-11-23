@@ -21,14 +21,27 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DeleteExpenseDialog } from "@/components/delete-expense-dialog";
 import { ExpandToggleButton } from "@/components/expand-toggle-button";
+import { BackfillCategoriesSheet } from "@/components/backfill-categories-sheet";
+import { CardPeriodTotals } from "@/components/card-period-totals";
+import { CategoryManageSheet } from "@/components/category-manage-sheet";
 import { ExpenseEditSheet } from "@/components/expense-edit-sheet";
 import { ExpenseSummaryCard } from "@/components/expense-summary-card";
+import { PeriodRangeControl } from "@/components/period-range-control";
+import type { PeriodPreset } from "@/lib/expense-period";
 import {
-  CATEGORY_GROUPS,
-  type CategoryCode,
-  getCategoryLabel,
-  isCategoryCode,
-} from "@/lib/categories";
+  formatPeriodLabel,
+  isSingleCalendarMonth,
+  kstTodayYmd,
+  kstViewMonth,
+  resolvePeriodRange,
+  type DateRange,
+} from "@/lib/expense-period";
+import {
+  categoriesForFilter,
+  mergeCategoryOptions,
+  resolveCategoryLabel,
+  type UserCategoryRow,
+} from "@/lib/user-categories";
 import {
   buildReorderPayload,
   sortExpenses,
@@ -37,13 +50,12 @@ import {
 import { expenseTextParts } from "@/lib/expense-parse";
 import {
   formatDateWithWeekday,
+  formatWon,
   sumByWeekdayInMonth,
 } from "@/lib/expense-date";
 import {
   addMonths,
   formatMonthLabel,
-  getCurrentViewMonth,
-  isCurrentMonth,
   isSameMonth,
   monthDateRange,
   viewMonthFromExpenseDate,
@@ -76,6 +88,11 @@ export type UsageSectionHandle = {
   getCards: () => UserCardRow[];
   persistSaveCardId: (cardId: string) => void;
   getFilterMismatchHint: (cardId: string | null | undefined) => string | null;
+  getStatsQuery: () => {
+    start: string;
+    end: string;
+    categoryCode: string | null;
+  };
 };
 
 type Props = {
@@ -119,13 +136,12 @@ function TrashIcon() {
 }
 
 function CategoryBadge({
-  code,
+  label,
   needsReview,
 }: {
-  code: string | null | undefined;
+  label: string;
   needsReview?: boolean | null;
 }) {
-  const label = getCategoryLabel(code);
   if (needsReview) {
     return (
       <span
@@ -150,6 +166,7 @@ function SortableRow({
   filterActive,
   cardLabel,
   installmentMonths,
+  categoryLabel,
   onEdit,
   onDelete,
   deleteConfirmOpen,
@@ -163,6 +180,7 @@ function SortableRow({
   filterActive: boolean;
   cardLabel: string;
   installmentMonths: number | null;
+  categoryLabel: string;
   onEdit: () => void;
   onDelete: () => void;
   deleteConfirmOpen: boolean;
@@ -215,7 +233,7 @@ function SortableRow({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <CategoryBadge
-              code={entry.category_code}
+              label={categoryLabel}
               needsReview={entry.category_needs_review}
             />
             <p className="text-xs text-brand-muted sm:text-sm">
@@ -291,9 +309,14 @@ export function ExpenseUsageSection({
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("date");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryCode | "all">(
-    "all",
-  );
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [userCategories, setUserCategories] = useState<UserCategoryRow[]>([]);
+  const [categoryManageOpen, setCategoryManageOpen] = useState(false);
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("this_month");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [clientReady, setClientReady] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardFilter>("all");
   const [cards, setCards] = useState<UserCardRow[]>([]);
   const [saveCardId, setSaveCardId] = useState<string>("");
@@ -320,15 +343,20 @@ export function ExpenseUsageSection({
     }),
   );
 
-  const loadEntriesForMonth = useCallback(async (vm: ViewMonth) => {
+  const loadCategories = useCallback(async () => {
+    const res = await fetch("/api/user-categories");
+    const data = await res.json();
+    if (data.categories) setUserCategories(data.categories as UserCategoryRow[]);
+  }, []);
+
+  const loadEntriesForRange = useCallback(async (range: DateRange) => {
     setLoadingList(true);
     setListError(null);
-    const { start, end } = monthDateRange(vm);
     const { data, error } = await supabase
       .from("expenses")
       .select(EXPENSE_SELECT)
-      .gte("date", start)
-      .lte("date", end);
+      .gte("date", range.start)
+      .lte("date", range.end);
 
     if (error) {
       setListError(
@@ -343,12 +371,31 @@ export function ExpenseUsageSection({
     setLoadingList(false);
   }, []);
 
+  const periodResolved = useMemo(() => {
+    if (!clientReady || !viewMonth) {
+      return { range: null, error: null as string | null };
+    }
+    return resolvePeriodRange({
+      preset: periodPreset,
+      viewMonth,
+      customStart,
+      customEnd,
+    });
+  }, [clientReady, periodPreset, viewMonth, customStart, customEnd]);
+
+  const dateRange = periodResolved.range;
+  const periodError = periodResolved.error;
+
   const reload = useCallback(async () => {
-    if (viewMonth) await loadEntriesForMonth(viewMonth);
-  }, [loadEntriesForMonth, viewMonth]);
+    if (dateRange) await loadEntriesForRange(dateRange);
+  }, [loadEntriesForRange, dateRange]);
 
   useEffect(() => {
-    setViewMonth((prev) => prev ?? getCurrentViewMonth());
+    setClientReady(true);
+    setViewMonth((prev) => prev ?? kstViewMonth());
+    const today = kstTodayYmd();
+    setCustomStart((s) => s || today);
+    setCustomEnd((e) => e || today);
   }, []);
 
   useEffect(() => {
@@ -375,7 +422,8 @@ export function ExpenseUsageSection({
       .catch(() => {
         /* cards API unavailable before migration */
       });
-  }, []);
+    void loadCategories();
+  }, [loadCategories]);
 
   const persistSaveCardId = useCallback(
     (cardId: string) => {
@@ -415,8 +463,16 @@ export function ExpenseUsageSection({
   );
 
   useEffect(() => {
-    if (viewMonth) void loadEntriesForMonth(viewMonth);
-  }, [viewMonth, loadEntriesForMonth]);
+    if (dateRange) void loadEntriesForRange(dateRange);
+  }, [dateRange, loadEntriesForRange]);
+
+  useEffect(() => {
+    if (!dateRange || isSingleCalendarMonth(dateRange)) return;
+    if (sortMode === "manual") {
+      setSortMode("date");
+      setListExpanded(false);
+    }
+  }, [dateRange, sortMode]);
 
   useEffect(() => {
     onReady({
@@ -427,6 +483,11 @@ export function ExpenseUsageSection({
       getCards: () => cards,
       persistSaveCardId,
       getFilterMismatchHint,
+      getStatsQuery: () => ({
+        start: dateRange?.start ?? "",
+        end: dateRange?.end ?? "",
+        categoryCode: categoryFilter === "all" ? null : categoryFilter,
+      }),
     });
   }, [
     onReady,
@@ -437,6 +498,8 @@ export function ExpenseUsageSection({
     saveCardId,
     persistSaveCardId,
     getFilterMismatchHint,
+    dateRange,
+    categoryFilter,
   ]);
 
   const cardFiltered = useMemo(() => {
@@ -451,12 +514,19 @@ export function ExpenseUsageSection({
     [cardFiltered, sortMode],
   );
 
+  const filterCategoryOptions = useMemo(() => {
+    const codes = entries.map((e) => e.category_code ?? "other");
+    return mergeCategoryOptions(userCategories, codes);
+  }, [userCategories, entries]);
+
   const filtered = useMemo(() => {
     if (categoryFilter === "all") return sorted;
-    return sorted.filter(
-      (e) => (isCategoryCode(e.category_code ?? "") ? e.category_code : "other") === categoryFilter,
-    );
+    return sorted.filter((e) => (e.category_code ?? "other") === categoryFilter);
   }, [sorted, categoryFilter]);
+
+  const manualSortAllowed = Boolean(
+    dateRange && isSingleCalendarMonth(dateRange),
+  );
 
   const listFilterActive =
     categoryFilter !== "all" || cardFilter !== "all";
@@ -549,6 +619,12 @@ export function ExpenseUsageSection({
   }
 
   async function handleSortModeChange(mode: SortMode) {
+    if (mode === "manual" && !manualSortAllowed) {
+      setReorderError(
+        "직접 정렬은 한 달 범위 조회에서만 사용할 수 있습니다.",
+      );
+      return;
+    }
     if (mode === "manual") {
       setSortMode(mode);
       setUsageListVisible(true);
@@ -614,77 +690,64 @@ export function ExpenseUsageSection({
     }
   }
 
-  async function runBackfill() {
+  function openBackfill() {
     setBackfillMsg(null);
-    const res = await fetch("/api/expenses/backfill-categories", {
-      method: "POST",
-    });
-    const data = (await res.json()) as { updated?: number; error?: string };
-    if (!res.ok) {
-      setBackfillMsg(data.error ?? "자동 분류에 실패했습니다.");
+    if (!dateRange) {
+      setBackfillMsg(periodError ?? "조회 기간을 먼저 선택해 주세요.");
       return;
     }
-    setBackfillMsg(`${data.updated ?? 0}건 분류를 갱신했습니다.`);
-    await reload();
+    setBackfillOpen(true);
   }
 
-  if (!viewMonth) {
+  if (!viewMonth || !dateRange) {
     return (
       <div className="bg-brand-saved-bg px-4 py-4 text-sm text-brand-muted">
-        불러오는 중…
+        {periodError ?? "불러오는 중…"}
       </div>
     );
   }
 
-  const usageTitle = isCurrentMonth(viewMonth)
-    ? "이번 달 사용내역"
-    : "선택한 달의 사용내역";
+  const periodTitle = formatPeriodLabel(periodPreset, dateRange, viewMonth);
 
   return (
     <div className="bg-brand-saved-bg px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-brand-ink">{usageTitle}</h2>
-        <div className="flex flex-wrap gap-2">
-          {!isCurrentMonth(viewMonth) && (
-            <button
-              type="button"
-              onClick={() => goToMonth(getCurrentViewMonth())}
-              className="rounded-[10px] border border-brand-border bg-brand-surface px-2.5 py-1.5 text-sm text-brand-green"
-            >
-              이번 달
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void runBackfill()}
-            className="rounded-[10px] border border-brand-border bg-brand-surface px-2.5 py-1.5 text-sm text-brand-muted"
-          >
-            기존 내역 자동 분류
-          </button>
-        </div>
+        <h2 className="text-base font-semibold text-brand-ink">
+          사용내역 · {periodTitle}
+        </h2>
+        <button
+          type="button"
+          onClick={() => openBackfill()}
+          className="rounded-[10px] border border-brand-border bg-brand-surface px-2.5 py-1.5 text-sm text-brand-muted"
+        >
+          규칙 기반 분류 실행
+        </button>
       </div>
 
-      <div className="mb-3 flex items-center justify-center gap-1">
-        <button
-          type="button"
-          onClick={() => goToMonth(addMonths(viewMonth, -1))}
-          aria-label="이전 달"
-          className="flex h-11 w-11 items-center justify-center rounded-[10px] hover:bg-brand-user-bubble"
-        >
-          ‹
-        </button>
-        <p className="min-w-[8.5rem] text-center text-base font-semibold">
-          {formatMonthLabel(viewMonth)}
-        </p>
-        <button
-          type="button"
-          onClick={() => goToMonth(addMonths(viewMonth, 1))}
-          aria-label="다음 달"
-          className="flex h-11 w-11 items-center justify-center rounded-[10px] hover:bg-brand-user-bubble"
-        >
-          ›
-        </button>
-      </div>
+      <PeriodRangeControl
+        preset={periodPreset}
+        viewMonth={viewMonth}
+        range={dateRange}
+        customStart={customStart}
+        customEnd={customEnd}
+        customError={periodPreset === "custom" ? periodError : null}
+        onPresetChange={(next) => {
+          setPeriodPreset(next);
+          if (next === "this_month") {
+            setViewMonth(kstViewMonth());
+          }
+          if (next === "last_month") {
+            setViewMonth(addMonths(kstViewMonth(), -1));
+          }
+          setListExpanded(false);
+        }}
+        onViewMonthChange={(vm) => {
+          goToMonth(vm);
+          if (periodPreset !== "month") setPeriodPreset("month");
+        }}
+        onCustomStartChange={setCustomStart}
+        onCustomEndChange={setCustomEnd}
+      />
 
       {cards.length > 0 ? (
         <CardFilterChips
@@ -712,7 +775,8 @@ export function ExpenseUsageSection({
         <button
           type="button"
           onClick={() => void handleSortModeChange("manual")}
-          className={`h-10 flex-1 rounded-[10px] px-2 text-sm ${
+          disabled={!manualSortAllowed}
+          className={`h-10 flex-1 rounded-[10px] px-2 text-sm disabled:opacity-50 ${
             sortMode === "manual"
               ? "bg-brand-green text-white"
               : "border border-brand-border bg-brand-surface text-brand-ink"
@@ -722,36 +786,63 @@ export function ExpenseUsageSection({
         </button>
       </div>
 
-      <label className="mb-2 flex flex-col gap-1 text-sm text-brand-muted">
-        항목 필터
-        <select
-          value={categoryFilter}
-          onChange={(e) => {
-            setCategoryFilter(e.target.value as CategoryCode | "all");
-            setListExpanded(false);
-          }}
-          className="h-10 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
-        >
-          <option value="all">전체 항목</option>
-          {CATEGORY_GROUPS.flatMap((g) =>
-            g.codes.map((c) => (
-              <option key={c} value={c}>
-                {getCategoryLabel(c)}
+      <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end">
+        <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-brand-muted">
+          분류
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setListExpanded(false);
+            }}
+            className="h-10 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
+          >
+            <option value="all">전체 분류</option>
+            {categoriesForFilter(filterCategoryOptions).map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.display_name}
+                {!c.is_active ? " (중지)" : ""}
               </option>
-            )),
-          )}
-        </select>
-      </label>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => setCategoryManageOpen(true)}
+          className="h-10 shrink-0 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-sm text-brand-ink"
+        >
+          분류 관리
+        </button>
+      </div>
 
       {listFilterActive && sortMode === "manual" && (
         <p className="mb-2 text-sm text-brand-muted">
-          전체 카드·전체 항목에서만 순서를 변경할 수 있습니다.
+          전체 카드·전체 분류에서만 순서를 변경할 수 있습니다.
         </p>
       )}
 
+      {!manualSortAllowed && sortMode === "date" ? (
+        <p className="mb-2 text-xs text-brand-muted">
+          여러 달을 조회 중일 때는 날짜순만 사용할 수 있습니다.
+        </p>
+      ) : null}
+
+      {!loadingList && !listError && (
+        <CardPeriodTotals range={dateRange} entries={entries} cards={cards} />
+      )}
+
+      <p className="mb-2 rounded-[10px] border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-ink">
+        조회 결과 <strong>{filtered.length}건</strong> / 합계{" "}
+        <strong className="font-mono tabular-nums">{formatWon(filteredTotal)}</strong>
+        <span className="mt-0.5 block text-xs text-brand-muted">
+          카드·분류 필터 적용 · 승인 총액(할부 1건 전액)
+        </span>
+      </p>
+
       {!loadingList && !listError && (
         <ExpenseSummaryCard
-          viewMonth={viewMonth}
+          periodLabel={periodTitle}
+          range={dateRange}
           monthTotal={monthTotal}
           entryCount={cardFiltered.length}
           categoryFilter={categoryFilter}
@@ -846,6 +937,10 @@ export function ExpenseUsageSection({
                 <SortableRow
                   key={entry.id}
                   entry={entry}
+                  categoryLabel={resolveCategoryLabel(
+                    entry.category_code,
+                    filterCategoryOptions,
+                  )}
                   manualMode={sortMode === "manual"}
                   filterActive={listFilterActive}
                   cardLabel={getCardLabel(cards, entry.card_id)}
@@ -899,9 +994,28 @@ export function ExpenseUsageSection({
         onConfirm={() => void confirmDelete()}
       />
 
+      <CategoryManageSheet
+        open={categoryManageOpen}
+        onClose={() => setCategoryManageOpen(false)}
+        onUpdated={() => void loadCategories()}
+      />
+
+      <BackfillCategoriesSheet
+        open={backfillOpen}
+        onClose={() => setBackfillOpen(false)}
+        range={dateRange}
+        cardFilter={cardFilter}
+        cards={cards}
+        onDone={(msg) => {
+          setBackfillMsg(msg);
+          void reload();
+        }}
+      />
+
       <ExpenseEditSheet
         entry={editEntry}
         cards={cards}
+        categoryOptions={filterCategoryOptions}
         open={Boolean(editEntry)}
         onClose={() => setEditEntry(null)}
         onSaved={(expense, previousDate) => {

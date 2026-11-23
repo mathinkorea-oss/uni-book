@@ -39,6 +39,11 @@ export async function POST(request: Request) {
     messages?: ChatMessageInput[];
     sortMode?: "date" | "manual";
     cardId?: string | null;
+    statsQuery?: {
+      start?: string;
+      end?: string;
+      categoryCode?: string | null;
+    };
   };
   try {
     body = await request.json();
@@ -69,9 +74,15 @@ export async function POST(request: Request) {
 
   if (intent === "stats") {
     try {
+      const sq = body.statsQuery;
       const { rows, error: allError } = await fetchAllExpensesForStats(
         supabase,
-        body.cardId ?? undefined,
+        {
+          start: sq?.start,
+          end: sq?.end,
+          cardId: body.cardId ?? null,
+          categoryCode: sq?.categoryCode ?? null,
+        },
       );
       if (allError) {
         return NextResponse.json(
@@ -80,12 +91,19 @@ export async function POST(request: Request) {
         );
       }
 
-      const table = formatExpensesForStats(rows);
+      const { ensureUserCategories } = await import("@/lib/user-categories-server");
+      const { categories } = await ensureUserCategories(supabase);
+      const table = formatExpensesForStats(rows, categories);
+      const periodNote =
+        sq?.start && sq?.end
+          ? `${sq.start} ~ ${sq.end}${sq.categoryCode ? `, 분류=${sq.categoryCode}` : ""}`
+          : undefined;
       const prompt = buildStatsAnswerPrompt(
         todayISO(),
         table,
         rows.length,
         messages,
+        periodNote,
       );
       const reply = await generateTextWithFallback(apiKey, prompt);
 

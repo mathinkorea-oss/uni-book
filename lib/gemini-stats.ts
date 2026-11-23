@@ -1,5 +1,8 @@
-import { getCategoryLabel, isCategoryCode } from "@/lib/categories";
 import type { ChatMessageInput } from "@/lib/gemini-expense";
+import {
+  resolveCategoryLabel,
+  type UserCategoryRow,
+} from "@/lib/user-categories";
 
 export type ExpenseForStats = {
   date: string;
@@ -9,14 +12,15 @@ export type ExpenseForStats = {
   category_code?: string | null;
 };
 
-export function formatExpensesForStats(rows: ExpenseForStats[]): string {
+export function formatExpensesForStats(
+  rows: ExpenseForStats[],
+  categories: UserCategoryRow[] = [],
+): string {
   if (!rows.length) return "(저장된 지출 없음)";
 
   return rows
     .map((r) => {
-      const cat = isCategoryCode(r.category_code ?? "")
-        ? getCategoryLabel(r.category_code!)
-        : getCategoryLabel("other");
+      const cat = resolveCategoryLabel(r.category_code, categories);
       const note = r.note?.trim() ? ` | 참고:${r.note.trim()}` : "";
       return `${r.date}\t${r.amount}\t${cat}\t${r.description}${note}`;
     })
@@ -28,6 +32,7 @@ export function buildStatsAnswerPrompt(
   expenseTable: string,
   expenseCount: number,
   messages: ChatMessageInput[],
+  periodNote?: string,
 ) {
   const transcript = messages
     .map((m) => `${m.role === "user" ? "사용자" : "AI"}: ${m.content}`)
@@ -36,8 +41,10 @@ export function buildStatsAnswerPrompt(
   return `오늘 날짜: ${today}
 
 당신은 유니더노트의 친근한 가계부 도우미입니다.
-아래는 사용자 본인의 법인카드 지출 전체 목록입니다(탭 구분: 날짜, 금액(원), 분류, 사용내용).
+아래는 사용자 본인의 지출 목록입니다(탭 구분: 날짜, 금액(원), 분류, 사용내용).
+조회 조건: ${periodNote ?? "전체 기간"}
 총 ${expenseCount}건입니다. 목록에 없는 금액·날짜·항목은 지어내지 마세요.
+할부 결제도 승인 총액이 1건으로 기록됩니다(월별 카드 청구액과 다를 수 있음).
 
 지출 목록:
 ${expenseTable}

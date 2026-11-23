@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { CategoryCode } from "@/lib/categories";
 import {
-  CATEGORY_GROUPS,
-  type CategoryCode,
-  getCategoryLabel,
-} from "@/lib/categories";
+  categoriesForPicker,
+  type UserCategoryRow,
+} from "@/lib/user-categories";
 import { formatDateWithWeekday } from "@/lib/expense-date";
 import { buildExpenseDateIso } from "@/lib/parse-shinhan-sms";
 import type { UserCardRow } from "@/lib/cards";
@@ -62,6 +62,7 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
     "paste",
   );
   const [cards, setCards] = useState<UserCardRow[]>([]);
+  const [userCategories, setUserCategories] = useState<UserCategoryRow[]>([]);
   const [selectedCardId, setSelectedCardId] = useState("");
   const [installmentMonths, setInstallmentMonths] = useState<number | null>(null);
   const [cardMismatch, setCardMismatch] = useState(false);
@@ -92,6 +93,12 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
         const list = data.cards ?? [];
         setCards(list);
         setSelectedCardId("");
+      })
+      .catch(() => {});
+    void fetch("/api/user-categories")
+      .then((r) => r.json())
+      .then((data: { categories?: UserCategoryRow[] }) => {
+        setUserCategories(data.categories ?? []);
       })
       .catch(() => {});
     setStep("paste");
@@ -478,13 +485,11 @@ export function CardSmsSheet({ open, onClose, getSortMode, onSaved }: Props) {
                     }}
                     className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
                   >
-                    {CATEGORY_GROUPS.flatMap((g) =>
-                      g.codes.map((c) => (
-                        <option key={c} value={c}>
-                          {getCategoryLabel(c)}
-                        </option>
-                      )),
-                    )}
+                    {categoriesForPicker(userCategories).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.display_name}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-brand-muted">

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { isCategoryCode, normalizeCategoryCode } from "@/lib/categories";
+import { isCategoryCode } from "@/lib/categories";
+import {
+  resolveSelectableCategoryCode,
+  resolveUserCategoryCode,
+} from "@/lib/validate-category-code";
 import { resolveCategory } from "@/lib/classify-expense";
 import { buildExpenseDateIso } from "@/lib/parse-shinhan-sms";
 import { parseConfirmedYear } from "@/lib/sms-confirmed-year";
@@ -279,15 +283,33 @@ export async function POST(request: Request) {
     });
   }
 
-  const categoryCode =
-    body.category_code && isCategoryCode(body.category_code)
-      ? body.category_code
-      : normalizeCategoryCode(body.category_code);
+  let categoryCode: string;
+  if (body.category_user_set) {
+    const picked = await resolveSelectableCategoryCode(
+      supabase,
+      user.id,
+      body.category_code,
+    );
+    if (!picked.ok) {
+      return NextResponse.json({ error: picked.message }, { status: 400 });
+    }
+    categoryCode = picked.code;
+  } else {
+    categoryCode = await resolveUserCategoryCode(
+      supabase,
+      user.id,
+      body.category_code,
+    );
+  }
   const classified = resolveCategory(
     description,
     body.note?.trim() ?? "",
-    categoryCode,
+    isCategoryCode(categoryCode) ? categoryCode : null,
   );
+  const finalCategoryCode = body.category_user_set ? categoryCode : classified.code;
+  const finalNeedsReview = body.category_user_set
+    ? false
+    : classified.needsReview;
 
   let sortOrder: number | null = null;
   if (body.sortMode === "manual") {
@@ -313,10 +335,8 @@ export async function POST(request: Request) {
       amount: Math.round(amount),
       description,
       note: body.note?.trim() ?? "",
-      category_code: classified.code,
-      category_needs_review: body.category_user_set
-        ? false
-        : classified.needsReview,
+      category_code: finalCategoryCode,
+      category_needs_review: finalNeedsReview,
       category_user_set: Boolean(body.category_user_set),
       sort_order: sortOrder,
       sms_fingerprint: fingerprint,

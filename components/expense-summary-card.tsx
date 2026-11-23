@@ -1,21 +1,21 @@
 "use client";
 
-import type { CategoryCode } from "@/lib/categories";
 import { ExpandToggleButton } from "@/components/expand-toggle-button";
 import {
   formatAmountNumber,
   formatWon,
   WEEKDAY_DISPLAY_ORDER,
 } from "@/lib/expense-date";
-import { formatMonthLabel, type ViewMonth } from "@/lib/month";
+import type { DateRange } from "@/lib/expense-period";
 
 const WEEKDAY_PANEL_ID = "expense-weekday-breakdown";
 
 type Props = {
-  viewMonth: ViewMonth;
+  periodLabel: string;
+  range: DateRange;
   monthTotal: number;
   entryCount: number;
-  categoryFilter: CategoryCode | "all";
+  categoryFilter: string;
   filteredTotal: number;
   filteredCount: number;
   weekdaySums: Record<number, number>;
@@ -24,7 +24,8 @@ type Props = {
 };
 
 export function ExpenseSummaryCard({
-  viewMonth,
+  periodLabel,
+  range,
   monthTotal,
   entryCount,
   categoryFilter,
@@ -47,7 +48,10 @@ export function ExpenseSummaryCard({
     <div className="mb-3 overflow-hidden rounded-[12px] border border-brand-border bg-brand-surface lg:flex lg:items-stretch">
       <section className="bg-brand-yellow px-4 py-4 sm:px-5 lg:min-w-0 lg:flex-1 lg:py-5">
         <p className="text-sm font-medium text-brand-ink">
-          {formatMonthLabel(viewMonth)} 총 사용금액
+          {periodLabel} 총 사용금액
+        </p>
+        <p className="mt-0.5 text-xs text-brand-muted">
+          {range.start} ~ {range.end} · 카드 필터 기준
         </p>
         <p className="mt-1.5 font-mono text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tabular-nums text-brand-ink">
           {formatAmountNumber(monthTotal)}
@@ -58,7 +62,7 @@ export function ExpenseSummaryCard({
         <p className="mt-1.5 text-sm text-brand-ink/85">총 {entryCount}건</p>
         {filterActive && (
           <p className="mt-2 text-sm text-brand-ink/80">
-            선택 항목 기준 {formatWon(filteredTotal)} · {filteredCount}건
+            선택 분류 기준 {formatWon(filteredTotal)} · {filteredCount}건
           </p>
         )}
       </section>
@@ -74,8 +78,8 @@ export function ExpenseSummaryCard({
               요일별 사용금액
             </p>
             <p className="mt-0.5 text-xs text-brand-muted">
-              선택한 월 기준
-              {filterActive ? " · 선택 항목 기준" : ""}
+              선택한 기간 기준
+              {filterActive ? " · 선택 분류 기준" : ""}
             </p>
           </div>
           <ExpandToggleButton

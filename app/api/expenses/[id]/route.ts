@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isCategoryCode, normalizeCategoryCode } from "@/lib/categories";
+import { resolveSelectableCategoryCode } from "@/lib/validate-category-code";
 import {
   buildSemanticInput,
   findSemanticSmsDuplicate,
@@ -50,7 +50,7 @@ export async function PATCH(
   const { data: current } = await supabase
     .from("expenses")
     .select(
-      "id, card_id, sms_semantic_key, sms_confirmed_year, payment_time, sms_fingerprint",
+      "id, card_id, sms_semantic_key, sms_confirmed_year, payment_time, sms_fingerprint, category_code, category_user_set, category_needs_review",
     )
     .eq("id", id)
     .maybeSingle();
@@ -72,10 +72,30 @@ export async function PATCH(
     return NextResponse.json({ error: owned.message }, { status: 403 });
   }
 
-  const categoryCode =
-    body.category_code && isCategoryCode(body.category_code)
-      ? body.category_code
-      : normalizeCategoryCode(body.category_code);
+  const currentCode = current.category_code ?? "other";
+  const requestedCode =
+    body.category_code !== undefined && body.category_code !== null
+      ? String(body.category_code).trim()
+      : currentCode;
+  const categoryChanged = requestedCode !== currentCode;
+
+  let categoryCode = currentCode;
+  let categoryUserSet = Boolean(current.category_user_set);
+  let categoryNeedsReview = Boolean(current.category_needs_review);
+
+  if (categoryChanged) {
+    const resolved = await resolveSelectableCategoryCode(
+      supabase,
+      user.id,
+      requestedCode,
+    );
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.message }, { status: 400 });
+    }
+    categoryCode = resolved.code;
+    categoryUserSet = true;
+    categoryNeedsReview = false;
+  }
 
   const confirmedYear =
     current.sms_confirmed_year ?? Number(body.date.trim().slice(0, 4));
@@ -111,8 +131,8 @@ export async function PATCH(
       description: body.description.trim(),
       note: body.note?.trim() ?? "",
       category_code: categoryCode,
-      category_user_set: Boolean(body.category_user_set),
-      category_needs_review: false,
+      category_user_set: categoryUserSet,
+      category_needs_review: categoryNeedsReview,
       card_id: nextCardId,
       sms_semantic_key: smsSemanticKey,
     })

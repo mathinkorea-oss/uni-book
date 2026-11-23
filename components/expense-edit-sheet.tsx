@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from "react";
 import {
-  CATEGORY_GROUPS,
-  type CategoryCode,
-  getCategoryLabel,
-  isCategoryCode,
-} from "@/lib/categories";
+  categoriesForPicker,
+  resolveCategoryLabel,
+  type UserCategoryRow,
+} from "@/lib/user-categories";
+
+function resolveInactiveCategoryLabel(
+  code: string,
+  options: UserCategoryRow[],
+): string {
+  const name = resolveCategoryLabel(code, options);
+  return name === code ? `${code} (중지·레거시)` : `${name} (중지됨)`;
+}
 import type { UserCardRow } from "@/lib/cards";
 import type { ExpenseRow } from "@/lib/supabase/client";
 import { expenseTextParts } from "@/lib/expense-parse";
@@ -14,17 +21,25 @@ import { expenseTextParts } from "@/lib/expense-parse";
 type Props = {
   entry: ExpenseRow | null;
   cards: UserCardRow[];
+  categoryOptions: UserCategoryRow[];
   open: boolean;
   onClose: () => void;
   onSaved: (expense: ExpenseRow, previousDate: string) => void;
 };
 
-export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props) {
+export function ExpenseEditSheet({
+  entry,
+  cards,
+  categoryOptions,
+  open,
+  onClose,
+  onSaved,
+}: Props) {
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [note, setNote] = useState("");
-  const [category, setCategory] = useState<CategoryCode>("other");
+  const [category, setCategory] = useState<string>("other");
   const [cardId, setCardId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,11 +51,7 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
     setAmount(String(entry.amount));
     setDescription(parts.main);
     setNote(parts.note ?? "");
-    setCategory(
-      isCategoryCode(entry.category_code ?? "")
-        ? (entry.category_code as CategoryCode)
-        : "other",
-    );
+    setCategory(entry.category_code ?? "other");
     setCardId(entry.card_id ?? cards[0]?.id ?? "");
     setError(null);
   }, [entry, cards]);
@@ -52,6 +63,8 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
     setError(null);
     setSaving(true);
     const previousDate = entry!.date;
+    const originalCode = entry!.category_code ?? "other";
+    const categoryChanged = category !== originalCode;
     try {
       const res = await fetch(`/api/expenses/${entry!.id}`, {
         method: "PATCH",
@@ -62,7 +75,7 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
           description,
           note,
           category_code: category,
-          category_user_set: true,
+          ...(categoryChanged ? { category_user_set: true } : {}),
           card_id: cardId,
         }),
       });
@@ -161,16 +174,21 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
             분류
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as CategoryCode)}
+              onChange={(e) => setCategory(e.target.value)}
               className="h-11 rounded-[10px] border border-brand-border px-3 text-base text-brand-ink"
             >
-              {CATEGORY_GROUPS.flatMap((g) =>
-                g.codes.map((c) => (
-                  <option key={c} value={c}>
-                    {getCategoryLabel(c)}
-                  </option>
-                )),
-              )}
+              {categoriesForPicker(categoryOptions).map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.display_name}
+                </option>
+              ))}
+              {!categoriesForPicker(categoryOptions).some(
+                (c) => c.code === category,
+              ) && category ? (
+                <option value={category} disabled={false}>
+                  {resolveInactiveCategoryLabel(category, categoryOptions)}
+                </option>
+              ) : null}
             </select>
           </label>
         </div>

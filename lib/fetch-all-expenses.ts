@@ -8,25 +8,35 @@ export type ExpenseStatsRow = {
   description: string;
   note: string | null;
   category_code: string | null;
+  card_id?: string | null;
+};
+
+export type ExpenseStatsQuery = {
+  start?: string;
+  end?: string;
+  cardId?: string | null;
+  categoryCode?: string | null;
 };
 
 export async function fetchAllExpensesForStats(
   supabase: SupabaseClient,
-  cardId?: string | null,
+  query: ExpenseStatsQuery = {},
 ): Promise<{ rows: ExpenseStatsRow[]; error: string | null }> {
   const rows: ExpenseStatsRow[] = [];
   let from = 0;
 
   while (true) {
-    let query = supabase
+    let q = supabase
       .from("expenses")
-      .select("date, amount, description, note, category_code")
+      .select("date, amount, description, note, category_code, card_id")
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
-    if (cardId) {
-      query = query.eq("card_id", cardId);
-    }
-    const { data, error } = await query.range(from, from + PAGE - 1);
+    if (query.start) q = q.gte("date", query.start);
+    if (query.end) q = q.lte("date", query.end);
+    if (query.cardId) q = q.eq("card_id", query.cardId);
+    if (query.categoryCode) q = q.eq("category_code", query.categoryCode);
+
+    const { data, error } = await q.range(from, from + PAGE - 1);
 
     if (error) {
       return { rows: [], error: error.message };

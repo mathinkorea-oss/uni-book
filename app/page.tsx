@@ -68,6 +68,7 @@ export default function Home() {
 
     const sortMode = usageRef.current?.getSortMode() ?? "date";
     const cardId = usageRef.current?.getCardIdForSave() ?? null;
+    if (cardId) usageRef.current?.persistSaveCardId(cardId);
 
     try {
       const res = await fetch("/api", {
@@ -119,6 +120,17 @@ export default function Home() {
             setSavedOtherMonth(savedVm);
           }
           await usageRef.current?.reload();
+          const hint = usageRef.current?.getFilterMismatchHint(cardId);
+          if (hint) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: hint,
+              },
+            ]);
+          }
         }
       }
     } catch {
@@ -137,18 +149,27 @@ export default function Home() {
     }
   }
 
-  async function handleCardSmsSaved(date: string) {
+  async function handleCardSmsSaved(
+    date: string,
+    savedCardId?: string | null,
+  ) {
     const savedVm = viewMonthFromExpenseDate(date);
     if (savedVm) {
       setSavedOtherMonth(savedVm);
     }
+  if (savedCardId) {
+      usageRef.current?.persistSaveCardId(savedCardId);
+    }
     await usageRef.current?.reload();
+    const hint = usageRef.current?.getFilterMismatchHint(savedCardId);
     setMessages((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "카드 승인 문자를 지출로 저장했습니다.",
+        content: hint
+          ? `카드 승인 문자를 지출로 저장했습니다. ${hint}`
+          : "카드 승인 문자를 지출로 저장했습니다.",
         savedSuccess: true,
       },
     ]);
@@ -190,7 +211,7 @@ export default function Home() {
             onSavedOtherMonthChange={setSavedOtherMonth}
             onMonthMovedNotice={setMonthMovedNotice}
             onReady={handleUsageReady}
-            recordInput={
+            recordInput={({ cards, saveCardId, onSaveCardIdChange }) => (
               <ExpenseRecordInput
                 input={input}
                 sending={sending}
@@ -198,8 +219,11 @@ export default function Home() {
                 onSubmit={handleSend}
                 onOpenCardSms={() => setCardSmsOpen(true)}
                 inputRef={inputRef}
+                cards={cards}
+                saveCardId={saveCardId}
+                onSaveCardIdChange={onSaveCardIdChange}
               />
-            }
+            )}
           />
         </aside>
 
@@ -264,7 +288,7 @@ export default function Home() {
         onClose={() => setCardSmsOpen(false)}
         getSortMode={() => usageRef.current?.getSortMode() ?? "date"}
         onSaved={(expense, date) => {
-          void handleCardSmsSaved(date);
+          void handleCardSmsSaved(date, expense.card_id);
         }}
       />
     </div>

@@ -34,7 +34,7 @@ export type CardSmsParseResult =
   | { ok: false; error: CardSmsParseError };
 
 const SHINHAN_HDR = /신한\s*법인\s*승인/i;
-const KB_HDR = /KB국민카드\d{4}\s*승인/i;
+const KB_HDR = /KB국민카드\s*\d{4}\s*승인/i;
 
 function countHeaders(text: string, re: RegExp): number {
   const m = text.match(new RegExp(re.source, re.flags + "g"));

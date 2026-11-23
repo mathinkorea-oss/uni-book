@@ -23,6 +23,8 @@ function ClipboardIcon() {
   );
 }
 
+import type { UserCardRow } from "@/lib/cards";
+
 type Props = {
   input: string;
   sending: boolean;
@@ -30,6 +32,9 @@ type Props = {
   onSubmit: (e?: FormEvent) => void;
   onOpenCardSms: () => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  cards?: UserCardRow[];
+  saveCardId?: string;
+  onSaveCardIdChange?: (cardId: string) => void;
 };
 
 export function ExpenseRecordInput({
@@ -39,6 +44,9 @@ export function ExpenseRecordInput({
   onSubmit,
   onOpenCardSms,
   inputRef,
+  cards = [],
+  saveCardId = "",
+  onSaveCardIdChange,
 }: Props) {
   const composingRef = useRef(false);
   const localRef = useRef<HTMLInputElement>(null);
@@ -61,6 +69,24 @@ export function ExpenseRecordInput({
         <ClipboardIcon />
         카드 문자 붙여넣기
       </button>
+
+      {cards.length > 0 ? (
+        <label className="mb-2 flex flex-col gap-1 text-sm text-brand-muted">
+          저장할 카드
+          <select
+            value={saveCardId}
+            onChange={(e) => onSaveCardIdChange?.(e.target.value)}
+            className="h-11 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
+            aria-label="저장할 카드 선택"
+          >
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.display_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <form
         onSubmit={(e) => {

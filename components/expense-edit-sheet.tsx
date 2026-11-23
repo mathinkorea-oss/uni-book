@@ -179,11 +179,11 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
             {error}
           </p>
         ) : null}
-        <div className="mt-5 flex gap-2">
+        <div className="sticky bottom-0 mt-5 flex shrink-0 flex-col-reverse gap-2 border-t border-brand-border bg-brand-surface pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:flex-row">
           <button
             type="button"
             onClick={onClose}
-            className="h-12 flex-1 rounded-[12px] border border-brand-border text-base"
+            className="box-border flex min-h-12 h-12 flex-1 items-center justify-center rounded-[12px] border border-brand-border text-base"
           >
             취소
           </button>
@@ -191,7 +191,7 @@ export function ExpenseEditSheet({ entry, cards, open, onClose, onSaved }: Props
             type="button"
             disabled={saving}
             onClick={() => void handleSave()}
-            className="h-12 flex-1 rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-70"
+            className="box-border flex min-h-12 h-12 flex-1 items-center justify-center rounded-[12px] bg-brand-green text-base font-medium text-white disabled:opacity-70"
           >
             {saving ? "저장 중…" : "저장"}
           </button>

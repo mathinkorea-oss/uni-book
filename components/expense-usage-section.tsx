@@ -55,11 +55,14 @@ import {
   getCardLabel,
   type UserCardRow,
 } from "@/lib/cards";
+import { defaultCardId } from "@/lib/user-cards-server";
 import { EXPENSE_SELECT, type ExpenseRow, supabase } from "@/lib/supabase/client";
 import {
   readUiPref,
+  readUiPrefString,
   UI_PREF_KEYS,
   writeUiPref,
+  writeUiPrefString,
 } from "@/lib/ui-prefs";
 
 const MOBILE_COLLAPSED = 3;
@@ -71,6 +74,8 @@ export type UsageSectionHandle = {
   getCardFilter: () => CardFilter;
   getCardIdForSave: () => string | null;
   getCards: () => UserCardRow[];
+  persistSaveCardId: (cardId: string) => void;
+  getFilterMismatchHint: (cardId: string | null | undefined) => string | null;
 };
 
 type Props = {
@@ -78,7 +83,11 @@ type Props = {
   onSavedOtherMonthChange: (vm: ViewMonth | null) => void;
   onMonthMovedNotice: (vm: ViewMonth) => void;
   onReady: (handle: UsageSectionHandle) => void;
-  recordInput?: ReactNode;
+  recordInput?: (ctx: {
+    cards: UserCardRow[];
+    saveCardId: string;
+    onSaveCardIdChange: (cardId: string) => void;
+  }) => ReactNode;
 };
 
 function PencilIcon() {
@@ -287,7 +296,7 @@ export function ExpenseUsageSection({
   );
   const [cardFilter, setCardFilter] = useState<CardFilter>("all");
   const [cards, setCards] = useState<UserCardRow[]>([]);
-  const [manualSaveCardId, setManualSaveCardId] = useState<string>("");
+  const [saveCardId, setSaveCardId] = useState<string>("");
   const [listExpanded, setListExpanded] = useState(false);
   const [editEntry, setEditEntry] = useState<ExpenseRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ExpenseRow | null>(null);
@@ -361,16 +370,49 @@ export function ExpenseUsageSection({
     void fetch("/api/cards")
       .then((r) => r.json())
       .then((data: { cards?: UserCardRow[] }) => {
-        const list = data.cards ?? [];
-        setCards(list);
-        if (list.length && !manualSaveCardId) {
-          setManualSaveCardId(list[0].id);
-        }
+        setCards(data.cards ?? []);
       })
       .catch(() => {
         /* cards API unavailable before migration */
       });
-  }, [manualSaveCardId]);
+  }, []);
+
+  const persistSaveCardId = useCallback(
+    (cardId: string) => {
+      setSaveCardId(cardId);
+      writeUiPrefString(userId, UI_PREF_KEYS.lastSaveCardId, cardId);
+    },
+    [userId],
+  );
+
+  useEffect(() => {
+    if (!cards.length) return;
+    if (cardFilter !== "all") {
+      const filtered = cards.find((c) => c.code === cardFilter)?.id;
+      if (filtered) setSaveCardId(filtered);
+      return;
+    }
+    const last = readUiPrefString(userId, UI_PREF_KEYS.lastSaveCardId);
+    const next =
+      (last && cards.some((c) => c.id === last) ? last : null) ??
+      defaultCardId(cards) ??
+      cards[0]?.id ??
+      "";
+    setSaveCardId(next);
+  }, [cardFilter, cards, userId]);
+
+  const getFilterMismatchHint = useCallback(
+    (cardId: string | null | undefined): string | null => {
+      if (!cardId) return null;
+      const card = cards.find((c) => c.id === cardId);
+      if (!card) return null;
+      if (cardFilter !== "all" && card.code !== cardFilter) {
+        return `저장한 카드는 ${card.display_name}입니다. 상단 필터를 ‘${card.display_name}’ 또는 ‘전체 카드’로 바꾸면 방금 기록을 볼 수 있습니다.`;
+      }
+      return null;
+    },
+    [cardFilter, cards],
+  );
 
   useEffect(() => {
     if (viewMonth) void loadEntriesForMonth(viewMonth);
@@ -381,15 +423,21 @@ export function ExpenseUsageSection({
       reload,
       getSortMode: () => sortMode,
       getCardFilter: () => cardFilter,
-      getCardIdForSave: () => {
-        if (cardFilter !== "all") {
-          return cards.find((c) => c.code === cardFilter)?.id ?? null;
-        }
-        return manualSaveCardId || cards[0]?.id || null;
-      },
+      getCardIdForSave: () => saveCardId || null,
       getCards: () => cards,
+      persistSaveCardId,
+      getFilterMismatchHint,
     });
-  }, [onReady, reload, sortMode, cardFilter, cards, manualSaveCardId]);
+  }, [
+    onReady,
+    reload,
+    sortMode,
+    cardFilter,
+    cards,
+    saveCardId,
+    persistSaveCardId,
+    getFilterMismatchHint,
+  ]);
 
   const cardFiltered = useMemo(() => {
     if (cardFilter === "all") return entries;
@@ -649,24 +697,6 @@ export function ExpenseUsageSection({
         />
       ) : null}
 
-      {cardFilter === "all" && cards.length > 1 ? (
-        <label className="mb-2 flex flex-col gap-1 text-sm text-brand-muted">
-          기록·입력 시 사용할 카드
-          <select
-            value={manualSaveCardId}
-            onChange={(e) => setManualSaveCardId(e.target.value)}
-            className="h-11 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
-            aria-label="저장할 카드 선택"
-          >
-            {cards.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.display_name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-
       <div className="mb-2 flex gap-2">
         <button
           type="button"
@@ -733,7 +763,11 @@ export function ExpenseUsageSection({
         />
       )}
 
-      {recordInput}
+      {recordInput?.({
+        cards,
+        saveCardId,
+        onSaveCardIdChange: persistSaveCardId,
+      })}
 
       {savedOtherMonth && !isSameMonth(savedOtherMonth, viewMonth) && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-brand-border bg-brand-surface px-3 py-2 text-sm">
@@ -871,6 +905,7 @@ export function ExpenseUsageSection({
         open={Boolean(editEntry)}
         onClose={() => setEditEntry(null)}
         onSaved={(expense, previousDate) => {
+          if (expense.card_id) persistSaveCardId(expense.card_id);
           const prevVm = viewMonthFromExpenseDate(previousDate);
           const nextVm = viewMonthFromExpenseDate(expense.date);
           if (nextVm && prevVm && !isSameMonth(prevVm, nextVm)) {

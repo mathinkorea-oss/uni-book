@@ -98,7 +98,7 @@ export function buildAnalysisPrompt(
 - 통계·조회 질문(얼마 썼어, 뭐 샀더라, 가장 많이 쓴 항목 등)은 이 JSON 분석 대상이 아닙니다. 지출을 새로 적으려는 경우만 처리합니다.
 - 지출 기록 의도가 있으면 action을 "save"로 설정합니다.
 - 날짜(YYYY-MM-DD), 금액(원, 정수), description(지출 내용), note(참고, 없으면 null)을 추출합니다.
-- category_code는 meal, student_snack, books_stationery, math_tools, academy_supplies, promotion, instructor_hiring, ai_service, transport, golf, travel, entertainment, personal_items, other 중 하나 또는 null(불확실).
+- category_code는 meal, student_snack, books_stationery, math_tools, academy_supplies, promotion, instructor_hiring, ai_service, transport, golf, travel, hospital, pharmacy, entertainment, gathering, gift, personal_items, other 중 하나 또는 null(불확실).
 - 쿠팡·네이버 등 상호만으로 분류를 확정하지 말고 null로 두세요.
 - "어제", "오늘", "지난주 금요일" 등은 오늘 날짜(${today}) 기준으로 계산합니다.
 - 금액이 "2만원", "15000원" 등이면 숫자(20000, 15000)로 변환합니다.

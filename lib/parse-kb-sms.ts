@@ -34,11 +34,19 @@ const REJECT_RE = /거절|승인\s*거부|부결/i;
 const BILLING_RE =
   /카드\s*대금|이용\s*대금|결제\s*대금|청구\s*예정|청구\s*안내|청구\s*내역|결제\s*예정\s*금액/i;
 
-const KB_HEADER_RE = /KB국민카드(\d{4})\s*승인/i;
-const AMOUNT_INSTALL_RE = /^([\d,]+)원(?:\s+(\d{1,2})개월)?$/;
+/** KB 승인 헤더 — 카드번호 앞뒤 공백 허용 */
+export const KB_HEADER_RE = /KB국민카드\s*(\d{4})\s*승인/i;
+const AMOUNT_INSTALL_RE = /([\d,]+)\s*원(?:\s*0?(\d{1,2})\s*개월)?/gi;
+const CUMULATIVE_AMOUNT_RE = /누적\s*[\d,]+\s*원?/gi;
+const MASKED_NAME_RE = /\S*\*\S*님/g;
+
+function collapseSmsText(lines: string[]): string {
+  return lines.join(" ").replace(/\s+/g, " ").trim();
+}
 
 function countKbHeaders(text: string): number {
-  const m = text.match(/KB국민카드\d{4}\s*승인/gi);
+  const re = new RegExp(KB_HEADER_RE.source, KB_HEADER_RE.flags + "g");
+  const m = text.match(re);
   return m?.length ?? 0;
 }
 
@@ -56,18 +64,53 @@ function expandWebHeaderLines(lines: string[]): string[] {
   return out;
 }
 
+function stripCumulativeSegments(text: string): string {
+  return text.replace(CUMULATIVE_AMOUNT_RE, " ").replace(/\s+/g, " ").trim();
+}
+
+function findApprovalAmount(
+  text: string,
+): { amount: number; installmentMonths: number | null } | null {
+  const re = new RegExp(AMOUNT_INSTALL_RE.source, AMOUNT_INSTALL_RE.flags);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const before = text.slice(Math.max(0, m.index - 12), m.index);
+    if (/누적/i.test(before)) continue;
+    const parsed = Number(m[1].replace(/,/g, ""));
+    if (!Number.isFinite(parsed) || parsed <= 0) continue;
+    const installmentMonths = m[2] ? Number(m[2]) : null;
+    return { amount: parsed, installmentMonths };
+  }
+  return null;
+}
+
+function extractMerchant(
+  bodyFlat: string,
+  dt: { index: number; length: number },
+): string {
+  const afterDt = bodyFlat.slice(dt.index + dt.length).trim();
+  const amountFragment = new RegExp(AMOUNT_INSTALL_RE.source, AMOUNT_INSTALL_RE.flags);
+  const cleaned = afterDt
+    .replace(CUMULATIVE_AMOUNT_RE, " ")
+    .replace(amountFragment, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned;
+}
+
 export function parseKbApprovalSms(raw: string): KbSmsParseResult {
   const lines = preprocessSmsLines(raw);
-  const normalized = lines.join("\n");
+  const bodyLines = expandWebHeaderLines(lines);
+  const bodyFlat = collapseSmsText(bodyLines);
 
-  if (!normalized) {
+  if (!bodyFlat) {
     return {
       ok: false,
       error: { kind: "error", message: "문자 내용을 입력해 주세요." },
     };
   }
 
-  if (BILLING_RE.test(normalized) && !KB_HEADER_RE.test(normalized)) {
+  if (BILLING_RE.test(bodyFlat) && !KB_HEADER_RE.test(bodyFlat)) {
     return {
       ok: false,
       error: {
@@ -77,7 +120,7 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
     };
   }
 
-  if (CANCEL_RE.test(normalized)) {
+  if (CANCEL_RE.test(bodyFlat)) {
     return {
       ok: false,
       error: {
@@ -87,7 +130,7 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
       },
     };
   }
-  if (REJECT_RE.test(normalized)) {
+  if (REJECT_RE.test(bodyFlat)) {
     return {
       ok: false,
       error: {
@@ -97,7 +140,7 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
     };
   }
 
-  if (countKbHeaders(normalized) > 1) {
+  if (countKbHeaders(bodyFlat) > 1) {
     return {
       ok: false,
       error: {
@@ -108,16 +151,8 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
     };
   }
 
-  const bodyLines = expandWebHeaderLines(lines);
-  let cardDigits: string | null = null;
-  for (const line of bodyLines) {
-    const h = KB_HEADER_RE.exec(line);
-    if (h) {
-      cardDigits = h[1];
-      break;
-    }
-  }
-  if (!cardDigits) {
+  const headerMatch = KB_HEADER_RE.exec(bodyFlat);
+  if (!headerMatch) {
     return {
       ok: false,
       error: {
@@ -126,11 +161,11 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
       },
     };
   }
+  const cardDigits = headerMatch[1];
 
-  const bodyText = bodyLines.join("\n");
-  const bodyNoBalance = stripBalanceSegments(
-    bodyText.replace(/누적\s*[\d,]+\s*원?/gi, " "),
-  );
+  let bodyNoBalance = stripBalanceSegments(bodyFlat.replace(CUMULATIVE_AMOUNT_RE, " "));
+  bodyNoBalance = stripCumulativeSegments(bodyNoBalance);
+  bodyNoBalance = bodyNoBalance.replace(MASKED_NAME_RE, " ").replace(/\s+/g, " ").trim();
 
   const dt = findDateTimeInString(bodyNoBalance);
   if (!dt) {
@@ -144,22 +179,8 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
     };
   }
 
-  let amount: number | null = null;
-  let installmentMonths: number | null = null;
-  for (const line of bodyLines) {
-    if (/누적/i.test(line)) continue;
-  const m = AMOUNT_INSTALL_RE.exec(line.replace(/\s+/g, " ").trim());
-    if (m) {
-      const parsed = Number(m[1].replace(/,/g, ""));
-      if (parsed > 0) {
-        amount = parsed;
-        installmentMonths = m[2] ? Number(m[2]) : null;
-        break;
-      }
-    }
-  }
-
-  if (amount == null) {
+  const amountInfo = findApprovalAmount(bodyNoBalance);
+  if (!amountInfo) {
     return {
       ok: false,
       error: {
@@ -169,13 +190,7 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
     };
   }
 
-  const afterDt = bodyNoBalance.slice(dt.index + dt.length).trim();
-  const merchantLines = afterDt
-    .split(/\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !/누적/i.test(l) && !AMOUNT_INSTALL_RE.test(l));
-
-  const merchant = merchantLines[0]?.replace(/\n/g, " ").trim() ?? "";
+  const merchant = extractMerchant(bodyNoBalance, dt);
   if (!merchant) {
     return {
       ok: false,
@@ -194,8 +209,8 @@ export function parseKbApprovalSms(raw: string): KbSmsParseResult {
       month: dt.month,
       day: dt.day,
       time: dt.time,
-      amount,
-      installmentMonths,
+      amount: amountInfo.amount,
+      installmentMonths: amountInfo.installmentMonths,
       merchant,
     },
   };

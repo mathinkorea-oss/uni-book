@@ -220,7 +220,7 @@ export function suggestCategoryFromMerchant(merchant: string): {
   if (ruled) {
     return { code: ruled.code, needsReview: ruled.needsReview };
   }
-  return { code: "meal", needsReview: true };
+  return { code: "other", needsReview: true };
 }
 
 export function buildExpenseDateIso(year: number, month: number, day: number): string | null {

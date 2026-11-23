@@ -37,7 +37,7 @@ import {
   type DateRange,
 } from "@/lib/expense-period";
 import {
-  categoriesForFilter,
+  formatCategoryFilterSuffix,
   mergeCategoryOptions,
   resolveCategoryLabel,
   type UserCategoryRow,
@@ -720,7 +720,7 @@ export function ExpenseUsageSection({
           onClick={() => openBackfill()}
           className="rounded-[10px] border border-brand-border bg-brand-surface px-2.5 py-1.5 text-sm text-brand-muted"
         >
-          규칙 기반 분류 실행
+          자동 분류
         </button>
       </div>
 
@@ -798,10 +798,10 @@ export function ExpenseUsageSection({
             className="h-10 rounded-[10px] border border-brand-border bg-brand-surface px-3 text-base text-brand-ink"
           >
             <option value="all">전체 분류</option>
-            {categoriesForFilter(filterCategoryOptions).map((c) => (
+            {filterCategoryOptions.map((c) => (
               <option key={c.code} value={c.code}>
                 {c.display_name}
-                {!c.is_active ? " (중지)" : ""}
+                {formatCategoryFilterSuffix(c)}
               </option>
             ))}
           </select>

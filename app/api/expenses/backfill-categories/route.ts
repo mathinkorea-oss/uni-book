@@ -95,8 +95,8 @@ export async function GET(request: Request) {
     scope,
     scopeLabel:
       scope === "reapply_rules"
-        ? "규칙 재적용 (직접 지정 분류 제외)"
-        : "미분류·확인 필요만",
+        ? "이미 분류된 내역도 다시 분류"
+        : "분류가 필요한 내역만",
     totalInRange: rows.length,
     targetCount: eligible.length,
     skippedUserSetCount: userLocked,

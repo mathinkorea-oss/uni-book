@@ -69,24 +69,73 @@ export function categoriesForPicker(
   return categoriesForFilter(categories).filter((c) => c.is_active);
 }
 
+/** 분류 마스터에 없고 지출에만 있는 코드 (미등록) */
+export function isUnregisteredCategoryRow(row: UserCategoryRow): boolean {
+  return row.id.startsWith("synthetic-") || row.user_id === "";
+}
+
+export function formatCategoryFilterSuffix(row: UserCategoryRow): string {
+  if (isUnregisteredCategoryRow(row)) return " (미등록)";
+  if (!row.is_active) return " (중지)";
+  return "";
+}
+
+function preferMasterCategoryRow(
+  a: UserCategoryRow,
+  b: UserCategoryRow,
+): UserCategoryRow {
+  if (a.user_id && !b.user_id) return a;
+  if (b.user_id && !a.user_id) return b;
+  if (a.is_builtin && !b.is_builtin) return a;
+  if (b.is_builtin && !a.is_builtin) return b;
+  return a;
+}
+
+function syntheticCategoryRow(code: string, sortIndex: number): UserCategoryRow {
+  let display_name = code;
+  if (isCategoryCode(code)) {
+    display_name = CATEGORY_LABELS[code as CategoryCode];
+  } else if (BACKFILL_LEGACY_KEYS.has(code)) {
+    display_name = `${code} (레거시)`;
+  }
+  return {
+    id: `synthetic-${code}`,
+    user_id: "",
+    code,
+    display_name,
+    sort_order: 9000 + sortIndex,
+    is_active: false,
+    is_builtin: isCategoryCode(code),
+  };
+}
+
 export function mergeCategoryOptions(
   categories: UserCategoryRow[],
   expenseCodes: string[],
 ): UserCategoryRow[] {
-  const known = new Set(categories.map((c) => c.code));
-  const extras = expenseCodes.filter(
-    (code) => code && !known.has(code),
-  );
-  const synthetic: UserCategoryRow[] = extras.map((code, i) => ({
-    id: `synthetic-${code}`,
-    user_id: "",
-    code,
-    display_name: isCategoryCode(code)
-      ? CATEGORY_LABELS[code as CategoryCode]
-      : code,
-    sort_order: 9000 + i,
-    is_active: false,
-    is_builtin: false,
-  }));
-  return categoriesForFilter([...categories, ...synthetic]);
+  const byCode = new Map<string, UserCategoryRow>();
+
+  for (const row of categories) {
+    const existing = byCode.get(row.code);
+    if (!existing) {
+      byCode.set(row.code, row);
+      continue;
+    }
+    byCode.set(row.code, preferMasterCategoryRow(existing, row));
+  }
+
+  const seenExp = new Set<string>();
+  const orphanCodes: string[] = [];
+  for (const raw of expenseCodes) {
+    const code = (raw ?? "other").trim() || "other";
+    if (seenExp.has(code) || byCode.has(code)) continue;
+    seenExp.add(code);
+    orphanCodes.push(code);
+  }
+
+  orphanCodes.forEach((code, i) => {
+    byCode.set(code, syntheticCategoryRow(code, i));
+  });
+
+  return categoriesForFilter([...byCode.values()]);
 }
